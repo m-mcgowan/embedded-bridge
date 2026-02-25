@@ -1,0 +1,21 @@
+Metadata-Version: 2.4
+Name: embedded-bridge
+Version: 0.0.0
+Summary: Structured communication with embedded devices — pluggable transport, receivers, and emitters
+Author: Matthew McGowan
+License: BSD-3-Clause
+Keywords: embedded,serial,testing,crash-detection,iot
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Classifier: Topic :: Software Development :: Embedded Systems
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0; extra == "dev"
+Requires-Dist: pytest-timeout>=2.0; extra == "dev"

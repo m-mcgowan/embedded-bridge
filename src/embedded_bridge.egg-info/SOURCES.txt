@@ -1,0 +1,6 @@
+pyproject.toml
+src/embedded_bridge.egg-info/PKG-INFO
+src/embedded_bridge.egg-info/SOURCES.txt
+src/embedded_bridge.egg-info/dependency_links.txt
+src/embedded_bridge.egg-info/requires.txt
+src/embedded_bridge.egg-info/top_level.txt
