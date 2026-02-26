@@ -1,6 +1,14 @@
 """Structured communication with embedded devices."""
 
-from .receivers import CrashDetector, CrashEvent, CrashPattern, ESP32_PATTERNS, Router
+from .receivers import (
+    CrashDetector,
+    CrashEvent,
+    CrashPattern,
+    ESP32_PATTERNS,
+    Router,
+    SleepEvent,
+    SleepWakeMonitor,
+)
 
 __all__ = [
     "CrashDetector",
@@ -8,4 +16,6 @@ __all__ = [
     "CrashPattern",
     "ESP32_PATTERNS",
     "Router",
+    "SleepEvent",
+    "SleepWakeMonitor",
 ]

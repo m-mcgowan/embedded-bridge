@@ -3,6 +3,7 @@
 from .base import Receiver
 from .crash_detector import CrashDetector, CrashEvent, CrashPattern, ESP32_PATTERNS
 from .router import Router
+from .sleep_wake import SleepEvent, SleepWakeMonitor
 
 __all__ = [
     "Receiver",
@@ -11,4 +12,6 @@ __all__ = [
     "CrashPattern",
     "ESP32_PATTERNS",
     "Router",
+    "SleepEvent",
+    "SleepWakeMonitor",
 ]
