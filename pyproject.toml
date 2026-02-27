@@ -27,6 +27,9 @@ classifiers = [
 dependencies = []
 
 [project.optional-dependencies]
+serial = [
+    "pyserial>=3.5",
+]
 dev = [
     "pytest>=7.0",
     "pytest-timeout>=2.0",

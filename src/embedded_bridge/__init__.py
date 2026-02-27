@@ -12,6 +12,7 @@ from .receivers import (
     SleepEvent,
     SleepWakeMonitor,
 )
+from .transport import Transport
 
 __all__ = [
     "CrashDetector",
@@ -24,4 +25,5 @@ __all__ = [
     "Router",
     "SleepEvent",
     "SleepWakeMonitor",
+    "Transport",
 ]
