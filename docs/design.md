@@ -285,18 +285,27 @@ measurements (PPK2 power data, host-side logs).
 
 Receives `T=<timestamp> <NAME>_STARTED/STOPPED` markers (the PPK2
 EventMapper protocol). Maintains an event log with both device and host
-timestamps.
+timestamps. Pairs START/STOP into `EventSpan` objects with durations.
 
 ```python
 capture = EventCapture()
 capture.feed("T=0.001600 GPS_FIX_STARTED")
 capture.feed("T=0.004200 GPS_FIX_STOPPED")
 # capture.events → structured event log
+# capture.spans → matched START/STOP pairs with durations
 ```
 
 Bridges between embedded-tracer serial output and ppk2-python's
 EventMapper channel encoding. This allows the same serial stream to
 feed both Perfetto trace collection and PPK2 power attribution.
+
+**Future: cross-thread causal profiling.** The current model captures
+scopes (single-thread START/STOP pairs). When embedded-tracer adds
+flow events (`ph:"s"/"f"` with shared `flow_id`), EventCapture will
+need a `Flow` type to support vertical profiling (action-centric cost
+across threads) alongside the existing horizontal view (per-service
+totals). See `embedded-tracer/docs/design.md` § "Future: Cross-Thread
+Causal Profiling" for the full model.
 
 ### SleepWakeMonitor
 
