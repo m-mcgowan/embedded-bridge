@@ -9,11 +9,12 @@ Usage::
     from embedded_bridge.testing import TestSession, TestInfo, TestOutcome
 """
 
-from .protocol import SOH, STX, parse_json_line, parse_marker
+from .protocol import ETX, SOH, STX, parse_json_line, parse_marker
 from .session import TestSession
 from .types import TestInfo, TestOutcome
 
 __all__ = [
+    "ETX",
     "SOH",
     "STX",
     "TestInfo",

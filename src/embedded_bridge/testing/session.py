@@ -6,7 +6,8 @@ power-profiler or doctest runners provide the transport and act on the
 results.
 
 This module knows nothing about PPK2 or power measurement — it only
-handles the serial protocol and timing markers.
+handles the serial protocol and timing markers. Sleep/wake detection
+can be customized via an injectable ``sleep_detector`` callback.
 
 Usage::
 
@@ -95,19 +96,31 @@ class TestSession:
             f"No test_catalog received within {timeout}s"
         )
 
-    def start_test(self, test_id: str, timeout: float = 10.0) -> None:
-        """Send STX + test ID. Blocks until TEST_STARTED marker received.
+    def start_test(
+        self,
+        test_id: str,
+        timeout: float = 10.0,
+        params: dict | None = None,
+    ) -> None:
+        """Send STX + test ID [+ params]. Blocks until TEST_STARTED marker.
 
         Args:
             test_id: Test identifier from the catalog.
             timeout: Max seconds to wait for TEST_STARTED.
+            params: Optional JSON-serializable params sent to firmware.
+                The firmware receives these as a parsed JSON object and
+                can use them to customize test behavior (e.g.
+                ``{"button_wakeup": false}``).
 
         Raises:
             TimeoutError: If TEST_STARTED not received within timeout.
         """
-        cmd = STX + test_id.encode("ascii") + b"\n"
+        line = test_id
+        if params:
+            line += " " + json.dumps(params, separators=(",", ":"))
+        cmd = STX + line.encode("ascii") + b"\n"
         self._transport.write(cmd)
-        logger.debug("Sent STX + %s", test_id)
+        logger.debug("Sent STX + %s", line)
 
         deadline = self._clock() + timeout
         while self._clock() < deadline:
@@ -131,94 +144,112 @@ class TestSession:
         test_id: str,
         timeout: float = 120.0,
         port_poll_interval: float = 1.0,
+        sleep_detector: Callable[[], str] | None = None,
     ) -> TestOutcome:
         """Monitor a running test until completion.
 
-        Reads serial output, tracks T= markers, monitors port for sleep/wake
-        transitions. Returns when TEST_STOPPED is received or timeout expires.
+        Reads serial output, tracks T= markers, handles sleep/wake
+        transitions. Returns when TEST_STOPPED is received or timeout.
+
+        Sleep detection uses the ``sleep_detector`` callback if provided.
+        The detector should return one of:
+
+        - ``"active"`` — device is still running (hasn't entered sleep)
+        - ``"sleeping"`` — device is in deep sleep
+        - ``"waking"`` — device is waking up (current rising)
+        - ``"unknown"`` — not enough data yet
+
+        If no detector is provided, falls back to port existence check
+        (``os.path.exists``) for sleep/wake detection.
 
         Args:
             test_id: Expected test ID (for matching TEST_STOPPED).
             timeout: Max seconds to wait for test completion.
-            port_poll_interval: How often to check port existence during sleep.
+            port_poll_interval: How often to poll during sleep.
+            sleep_detector: Optional callback for sleep/wake detection.
 
         Returns:
             TestOutcome with markers, serial log, and status.
         """
         outcome = TestOutcome(test_id=test_id)
-        port_path = self._transport.port_path
         sleeping = False
+        sleep_confirmed = False
         sleep_start_time: float | None = None
         sleep_expected_s: float | None = None
 
         deadline = self._clock() + timeout
 
         while self._clock() < deadline:
-            # If sleeping, monitor port instead of reading serial
             if sleeping:
-                if port_path and os.path.exists(port_path):
-                    # Port reappeared — device woke up
-                    wake_time = self._clock()
-                    if sleep_start_time is not None:
-                        actual_sleep = wake_time - sleep_start_time
-                        outcome.sleep_actual_s = actual_sleep
+                elapsed = self._clock() - sleep_start_time
 
-                        if sleep_expected_s is not None:
-                            if actual_sleep < sleep_expected_s * 0.8:
-                                outcome.warnings.append(
-                                    f"Premature wake: {actual_sleep:.1f}s "
-                                    f"(expected {sleep_expected_s:.0f}s)"
-                                )
-                            elif actual_sleep > sleep_expected_s * 1.3:
-                                outcome.warnings.append(
-                                    f"Late wake: {actual_sleep:.1f}s "
-                                    f"(expected {sleep_expected_s:.0f}s)"
-                                )
+                # Check for overall sleep timeout
+                if sleep_expected_s is not None:
+                    if elapsed > sleep_expected_s + 15:
+                        outcome.warnings.append(
+                            f"Device did not wake after {elapsed:.0f}s "
+                            f"(expected {sleep_expected_s:.0f}s)"
+                        )
+                        outcome.status = "timeout"
+                        return outcome
 
-                    logger.info(
-                        "Port reappeared after %.1fs",
-                        actual_sleep if sleep_start_time else 0,
-                    )
-                    sleeping = False
+                time.sleep(port_poll_interval)
 
-                    # Wait for serial to stabilize after wake
-                    time.sleep(2.0)
-
-                    # Reconnect transport if needed
-                    if not self._transport.is_connected():
-                        try:
-                            self._transport.connect()
-                        except Exception as e:
-                            logger.warning("Reconnect failed: %s", e)
-                            time.sleep(1.0)
-                            continue
-
-                    # Reset decoder for fresh connection
-                    self._decoder = codecs.getincrementaldecoder("utf-8")("replace")
-                    self._line_buf.clear()
-                else:
-                    # Still sleeping — check for timeout
-                    if sleep_expected_s is not None and sleep_start_time is not None:
-                        elapsed = self._clock() - sleep_start_time
-                        if elapsed > sleep_expected_s + 15:
-                            outcome.warnings.append(
-                                f"Device did not wake after {elapsed:.0f}s "
-                                f"(expected {sleep_expected_s:.0f}s)"
-                            )
-                            outcome.status = "timeout"
-                            return outcome
-                    time.sleep(port_poll_interval)
+                if not sleep_confirmed:
+                    # Phase 1: Wait for device to actually enter sleep
+                    state = self._check_sleep_state(sleep_detector)
+                    if state == "sleeping":
+                        sleep_confirmed = True
+                        logger.info(
+                            "Sleep confirmed after %.1fs", elapsed,
+                        )
+                    elif state == "active" and elapsed > 10.0:
+                        outcome.warnings.append(
+                            "Device did not enter deep sleep within 10s "
+                            "of SLEEP marker"
+                        )
+                        outcome.status = "error"
+                        return outcome
                     continue
+
+                # Phase 2: Wait for device to wake (port reappears)
+                state = self._check_sleep_state(sleep_detector)
+                if state == "sleeping":
+                    continue
+
+                # Phase 3: Device is waking — reconnect and handshake
+                logger.info(
+                    "Wake detected after %.1fs", elapsed,
+                )
+                wake_time = self._clock()
+                actual_sleep = wake_time - sleep_start_time
+                outcome.sleep_actual_s = actual_sleep
+
+                if sleep_expected_s is not None:
+                    if actual_sleep < sleep_expected_s * 0.8:
+                        outcome.warnings.append(
+                            f"Premature wake: {actual_sleep:.1f}s "
+                            f"(expected {sleep_expected_s:.0f}s)"
+                        )
+                    elif actual_sleep > sleep_expected_s * 1.3:
+                        outcome.warnings.append(
+                            f"Late wake: {actual_sleep:.1f}s "
+                            f"(expected {sleep_expected_s:.0f}s)"
+                        )
+
+                # Reconnect serial
+                if not self._reconnect_after_wake():
+                    outcome.warnings.append("Failed to reconnect after wake")
+                    outcome.status = "error"
+                    return outcome
+
+                sleeping = False
+                sleep_confirmed = False
+                continue
 
             # Normal mode: read serial
             line = self._read_line(timeout=0.5)
             if line is None:
-                # Check if port disappeared (entered sleep without SLEEP marker)
-                if port_path and not os.path.exists(port_path) and not sleeping:
-                    logger.info("Port disappeared — device likely sleeping")
-                    sleeping = True
-                    if sleep_start_time is None:
-                        sleep_start_time = self._clock()
                 continue
 
             outcome.serial_log.append(line)
@@ -258,7 +289,11 @@ class TestSession:
                     outcome.markers["SLEEP"] = host_ts
                     logger.info("SLEEP marker: %s seconds", duration)
 
-                    # Port will disappear shortly
+                    # Disconnect transport — device will enter deep sleep.
+                    try:
+                        self._transport.disconnect()
+                    except Exception:
+                        pass
                     sleeping = True
 
                 elif payload == f"TEST_STOPPED:{test_id}":
@@ -273,6 +308,73 @@ class TestSession:
         outcome.warnings.append(f"Test did not complete within {timeout}s")
         return outcome
 
+    def _check_sleep_state(
+        self, detector: Callable[[], str] | None,
+    ) -> str:
+        """Check whether device is sleeping, using CDC port check.
+
+        USB-CDC port disappearance is the primary sleep indicator —
+        the ESP32-S3 USB-CDC ``/dev/cu.usbmodem*`` node vanishes when
+        the chip enters deep sleep and reappears after wake.
+
+        Returns:
+            ``"sleeping"`` — port has disappeared (device in deep sleep).
+            ``"active"`` — port still present (or reappeared after wake).
+            ``"unknown"`` — no port path available.
+
+        An optional ``detector`` callback can override this for
+        special cases (e.g. PPK2-based detection).
+        """
+        if detector is not None:
+            return detector()
+
+        # Primary: USB-CDC port existence
+        port_path = self._transport.port_path
+        if not port_path:
+            return "unknown"
+
+        if os.path.exists(port_path):
+            return "active"
+        else:
+            return "sleeping"
+
+    def _reconnect_after_wake(self, max_attempts: int = 10) -> bool:
+        """Reconnect serial after device wakes from deep sleep.
+
+        Tries to reconnect, then sends SOH for the wake handshake.
+        The firmware waits for SOH before emitting PPK_STOP and
+        TEST_STOPPED markers.
+
+        Returns:
+            True if reconnected successfully.
+        """
+        # Ensure disconnected first
+        try:
+            self._transport.disconnect()
+        except Exception:
+            pass
+
+        # Reset decoder for fresh connection
+        self._decoder = codecs.getincrementaldecoder("utf-8")("replace")
+        self._line_buf.clear()
+
+        for attempt in range(1, max_attempts + 1):
+            try:
+                self._transport.connect()
+                logger.info("Reconnected (attempt %d)", attempt)
+
+                # Send SOH for wake handshake
+                self._transport.write(SOH)
+                logger.debug("Sent SOH (wake handshake)")
+                return True
+            except Exception as e:
+                logger.debug(
+                    "Reconnect attempt %d failed: %s", attempt, e,
+                )
+                time.sleep(1.0)
+
+        return False
+
     def _read_line(self, timeout: float = 0.5) -> str | None:
         """Read a single line from the transport.
 
@@ -284,7 +386,7 @@ class TestSession:
             try:
                 data = self._transport.read(timeout=min(0.1, timeout))
             except Exception:
-                return None
+                data = b""
 
             if not data:
                 # Check if we have a complete line buffered

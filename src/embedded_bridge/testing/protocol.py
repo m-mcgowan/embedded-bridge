@@ -28,6 +28,7 @@ from typing import Any
 # Control characters
 SOH = b"\x01"  # List tests
 STX = b"\x02"  # Run test (followed by id + newline)
+ETX = b"\x03"  # Configure fixture (followed by JSON + newline)
 
 # T= marker patterns for protocol-specific events.
 # These extend the existing T=<ts> <NAME>_STARTED/STOPPED format used by
