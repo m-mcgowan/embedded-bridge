@@ -12,6 +12,7 @@ from .receivers import (
     SleepEvent,
     SleepWakeMonitor,
 )
+from .testing import TestInfo, TestOutcome, TestSession
 from .transport import Transport
 
 __all__ = [
@@ -21,6 +22,9 @@ __all__ = [
     "ESP32_PATTERNS",
     "EventCapture",
     "EventSpan",
+    "TestInfo",
+    "TestOutcome",
+    "TestSession",
     "TraceEvent",
     "Router",
     "SleepEvent",
