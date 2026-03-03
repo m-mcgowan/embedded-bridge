@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "embedded-bridge"
 dynamic = ["version"]
 description = "Structured communication with embedded devices — pluggable transport, receivers, and emitters"
-readme = "README.md"
+# readme is at the repo root (../README.md), not bundled with the Python package
 license = {text = "BSD-3-Clause"}
 requires-python = ">=3.10"
 authors = [

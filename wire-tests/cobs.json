@@ -1,0 +1,54 @@
+{
+  "encode_vectors": [
+    {
+      "name": "empty",
+      "payload_hex": "",
+      "cobs_hex": "01",
+      "framed_hex": "0100"
+    },
+    {
+      "name": "hi",
+      "payload_hex": "4869",
+      "cobs_hex": "034869",
+      "framed_hex": "03486900"
+    },
+    {
+      "name": "single_A",
+      "payload_hex": "41",
+      "cobs_hex": "0241",
+      "framed_hex": "024100"
+    },
+    {
+      "name": "single_zero",
+      "payload_hex": "00",
+      "cobs_hex": "0101",
+      "framed_hex": "010100"
+    },
+    {
+      "name": "zeros_data_zeros",
+      "payload_hex": "0041000042",
+      "cobs_hex": "010241010242",
+      "framed_hex": "01024101024200",
+      "description": "zero, 0x41, zero, zero, 0x42"
+    },
+    {
+      "name": "all_zeros",
+      "payload_hex": "000000",
+      "cobs_hex": "01010101",
+      "framed_hex": "0101010100"
+    },
+    {
+      "name": "no_zeros",
+      "payload_hex": "414243",
+      "cobs_hex": "04414243",
+      "framed_hex": "0441424300"
+    },
+    {
+      "name": "one_zero_two",
+      "payload_hex": "010002",
+      "cobs_hex": "02010202",
+      "framed_hex": "0201020200",
+      "description": "0x01, 0x00, 0x02"
+    }
+  ]
+}

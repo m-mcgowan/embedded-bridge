@@ -1,0 +1,49 @@
+{
+  "constants": {
+    "FLAG": 126,
+    "ESC": 125,
+    "XON": 17,
+    "XOFF": 19
+  },
+  "encode_vectors": [
+    {
+      "name": "empty_payload",
+      "payload_hex": "",
+      "encoded_hex": "7e00007e"
+    },
+    {
+      "name": "hi",
+      "payload_hex": "4869",
+      "encoded_hex": "7e486926797e"
+    },
+    {
+      "name": "single_A",
+      "payload_hex": "41",
+      "encoded_hex": "7e41f5a37e"
+    },
+    {
+      "name": "abc",
+      "payload_hex": "414243",
+      "encoded_hex": "7e4142432f9f7e"
+    },
+    {
+      "name": "needs_stuffing",
+      "payload_hex": "7e7d111342",
+      "encoded_hex": "7e7d5e7d5d111342506b7e",
+      "description": "payload contains FLAG, ESC, XON, XOFF, and 0x42"
+    },
+    {
+      "name": "all_special",
+      "payload_hex": "7e7d",
+      "encoded_hex": "7e7d5e7d5df1cd7e",
+      "description": "payload is FLAG + ESC"
+    }
+  ],
+  "decode_error_vectors": [
+    {
+      "name": "corrupt_crc",
+      "wire_hex": "7e4869ffff7e",
+      "description": "valid frame structure but CRC is wrong — should be rejected"
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "constants": {
+    "END": 192,
+    "ESC": 219,
+    "ESC_END": 220,
+    "ESC_ESC": 221
+  },
+  "encode_vectors": [
+    {
+      "name": "hi",
+      "payload_hex": "4869",
+      "encoded_hex": "c04869c0"
+    },
+    {
+      "name": "single_A",
+      "payload_hex": "41",
+      "encoded_hex": "c041c0"
+    },
+    {
+      "name": "abc",
+      "payload_hex": "414243",
+      "encoded_hex": "c0414243c0"
+    },
+    {
+      "name": "hello",
+      "payload_hex": "68656c6c6f",
+      "encoded_hex": "c068656c6c6fc0"
+    },
+    {
+      "name": "needs_stuffing",
+      "payload_hex": "c0db42",
+      "encoded_hex": "c0dbdcdbdd42c0",
+      "description": "payload contains END and ESC bytes"
+    },
+    {
+      "name": "all_special",
+      "payload_hex": "c0db",
+      "encoded_hex": "c0dbdcdbddc0",
+      "description": "payload is END + ESC"
+    }
+  ]
+}

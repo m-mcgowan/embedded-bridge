@@ -1,0 +1,101 @@
+{
+  "constants": {
+    "SOH": 1,
+    "BINARY_PROTOCOL_V1": 1
+  },
+  "varint_vectors": [
+    {"value": 0, "encoded_hex": "00", "bytes": 1},
+    {"value": 1, "encoded_hex": "01", "bytes": 1},
+    {"value": 127, "encoded_hex": "7f", "bytes": 1},
+    {"value": 128, "encoded_hex": "8001", "bytes": 2},
+    {"value": 255, "encoded_hex": "ff01", "bytes": 2},
+    {"value": 300, "encoded_hex": "ac02", "bytes": 2},
+    {"value": 16383, "encoded_hex": "ff7f", "bytes": 2},
+    {"value": 16384, "encoded_hex": "808001", "bytes": 3},
+    {"value": 65535, "encoded_hex": "ffff03", "bytes": 3},
+    {"value": 1000000, "encoded_hex": "c0843d", "bytes": 3}
+  ],
+  "text_vectors": [
+    {
+      "name": "simple_hello",
+      "text": "hello",
+      "wire_hex": "68656c6c6f0a",
+      "description": "text + newline"
+    },
+    {
+      "name": "empty_text",
+      "text": "",
+      "wire_hex": "0a",
+      "description": "just a newline"
+    }
+  ],
+  "binary_vectors": [
+    {
+      "name": "abc",
+      "payload_hex": "414243",
+      "wire_hex": "010103414243",
+      "description": "SOH + V1 + varint(3) + ABC"
+    },
+    {
+      "name": "empty_payload",
+      "payload_hex": "",
+      "wire_hex": "010100",
+      "description": "SOH + V1 + varint(0)"
+    },
+    {
+      "name": "single_byte",
+      "payload_hex": "42",
+      "wire_hex": "01010142",
+      "description": "SOH + V1 + varint(1) + 0x42"
+    },
+    {
+      "name": "payload_with_soh",
+      "payload_hex": "01010142",
+      "wire_hex": "01010401010142",
+      "description": "payload contains SOH bytes — not special inside binary"
+    },
+    {
+      "name": "payload_with_newlines",
+      "payload_hex": "610a620a",
+      "wire_hex": "010104610a620a",
+      "description": "payload contains newlines — not special inside binary"
+    }
+  ],
+  "reader_vectors": [
+    {
+      "name": "text_then_binary_then_text",
+      "wire_hex": "68656c6c6f0a010103414243776f726c640a",
+      "expected": [
+        {"type": "text", "value": "hello"},
+        {"type": "binary", "value_hex": "414243"},
+        {"type": "text", "value": "world"}
+      ],
+      "description": "hello\\n + binary(ABC) + world\\n"
+    },
+    {
+      "name": "crlf_normalization",
+      "wire_hex": "68656c6c6f0d0a",
+      "expected": [
+        {"type": "text", "value": "hello"}
+      ],
+      "description": "CRLF normalized to LF — trailing \\r stripped by buffering handler"
+    },
+    {
+      "name": "multiple_text_lines",
+      "wire_hex": "610a620a630a",
+      "expected": [
+        {"type": "text", "value": "a"},
+        {"type": "text", "value": "b"},
+        {"type": "text", "value": "c"}
+      ]
+    },
+    {
+      "name": "unknown_version_recovery",
+      "wire_hex": "01ff68656c6c6f0a",
+      "expected": [
+        {"type": "text", "value": "hello"}
+      ],
+      "description": "SOH + unknown version 0xFF — discarded, then text resumes"
+    }
+  ]
+}

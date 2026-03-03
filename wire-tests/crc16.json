@@ -1,0 +1,48 @@
+{
+  "algorithm": "CRC-16/HDLC",
+  "init": 65535,
+  "good_residue": 3911,
+  "vectors": [
+    {
+      "name": "standard_check_value",
+      "input_hex": "313233343536373839",
+      "crc": 36974,
+      "description": "\"123456789\" — standard CRC-16/HDLC check value"
+    },
+    {
+      "name": "empty",
+      "input_hex": "",
+      "crc": 0
+    },
+    {
+      "name": "single_byte_0x00",
+      "input_hex": "00",
+      "crc": 61560
+    },
+    {
+      "name": "single_byte_0xff",
+      "input_hex": "ff",
+      "crc": 65280
+    },
+    {
+      "name": "sequential_1234",
+      "input_hex": "01020304",
+      "crc": 14737
+    },
+    {
+      "name": "abc_uppercase",
+      "input_hex": "414243",
+      "crc": 40751
+    }
+  ],
+  "residue_vectors": [
+    {
+      "name": "abc_residue",
+      "payload_hex": "414243",
+      "payload_crc": 40751,
+      "frame_hex": "4142432f9f",
+      "frame_crc": 3911,
+      "description": "CRC appended LE to payload; CRC of frame should equal good_residue"
+    }
+  ]
+}
