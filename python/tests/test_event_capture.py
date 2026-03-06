@@ -1,5 +1,7 @@
 """Tests for EventCapture receiver."""
 
+import json
+
 import pytest
 
 from embedded_bridge.receivers.event_capture import (
@@ -26,6 +28,16 @@ class FakeClock:
         self.now += seconds
 
 
+def _b(name: str, ts_us: int, pid: int = 1, tid: int = 1) -> str:
+    """Build a Chrome JSON begin event line."""
+    return json.dumps({"ph": "B", "ts": ts_us, "name": name, "pid": pid, "tid": tid})
+
+
+def _e(name: str, ts_us: int, pid: int = 1, tid: int = 1) -> str:
+    """Build a Chrome JSON end event line."""
+    return json.dumps({"ph": "E", "ts": ts_us, "name": name, "pid": pid, "tid": tid})
+
+
 # ── Protocol compliance ──────────────────────────────────────────────
 
 
@@ -39,52 +51,52 @@ class TestProtocol:
 
 
 class TestParsing:
-    def test_parse_started_event(self):
+    def test_parse_begin_event(self):
         clock = FakeClock(100.0)
         capture = EventCapture(clock=clock)
 
-        capture.feed("T=0.001600 GPS_STARTED")
+        capture.feed(_b("gps", 1600))
 
         assert len(capture.events) == 1
         e = capture.events[0]
-        assert e.name == "GPS"
+        assert e.name == "gps"
         assert e.action == "STARTED"
         assert e.device_timestamp_s == pytest.approx(0.0016)
         assert e.host_timestamp_s == 100.0
 
-    def test_parse_stopped_event(self):
+    def test_parse_end_event(self):
         clock = FakeClock(200.0)
         capture = EventCapture(clock=clock)
 
-        capture.feed("T=5.123456 IMU_STOPPED")
+        capture.feed(_e("imu", 5123456))
 
         assert len(capture.events) == 1
         e = capture.events[0]
-        assert e.name == "IMU"
+        assert e.name == "imu"
         assert e.action == "STOPPED"
         assert e.device_timestamp_s == pytest.approx(5.123456)
 
     def test_parse_large_timestamp(self):
         capture = EventCapture()
-        capture.feed("T=3600.000000 LONG_TEST_STARTED")
+        capture.feed(_b("long_test", 3600000000))
 
         assert len(capture.events) == 1
         assert capture.events[0].device_timestamp_s == pytest.approx(3600.0)
-        assert capture.events[0].name == "LONG_TEST"
+        assert capture.events[0].name == "long_test"
 
     def test_bytes_input(self):
         capture = EventCapture()
-        capture.feed(b"T=0.001000 GPS_STARTED")
+        capture.feed(_b("gps", 1000).encode("utf-8"))
 
         assert len(capture.events) == 1
-        assert capture.events[0].name == "GPS"
+        assert capture.events[0].name == "gps"
 
     def test_whitespace_stripped(self):
         capture = EventCapture()
-        capture.feed("  T=0.001000 GPS_STARTED  \n")
+        capture.feed(f"  {_b('gps', 1000)}  \n")
 
         assert len(capture.events) == 1
-        assert capture.events[0].name == "GPS"
+        assert capture.events[0].name == "gps"
 
 
 # ── Non-matching lines ───────────────────────────────────────────────
@@ -101,24 +113,29 @@ class TestIgnoredLines:
         capture.feed("power_profile: holding 'gps' active for 5000 ms")
         assert len(capture.events) == 0
 
-    def test_ignore_chrome_json(self):
+    def test_ignore_t_markers(self):
         capture = EventCapture()
-        capture.feed('{"ph":"B","ts":1000,"name":"gps","pid":1,"tid":1}')
+        capture.feed("T=0.001600 GPS_FIX_STARTED")
         assert len(capture.events) == 0
 
-    def test_ignore_partial_t_line(self):
+    def test_ignore_malformed_json(self):
         capture = EventCapture()
-        capture.feed("T=0.001000")  # No event name
+        capture.feed("{not valid json")
         assert len(capture.events) == 0
 
-    def test_ignore_malformed_timestamp(self):
+    def test_ignore_json_without_ph(self):
         capture = EventCapture()
-        capture.feed("T=abc.def GPS_STARTED")
+        capture.feed('{"ts":1000,"name":"gps"}')
         assert len(capture.events) == 0
 
-    def test_ignore_unknown_action(self):
+    def test_ignore_counter_events(self):
         capture = EventCapture()
-        capture.feed("T=0.001000 GPS_RUNNING")  # Not STARTED or STOPPED
+        capture.feed('{"ph":"C","ts":1000,"name":"heap","pid":1,"args":{"value":102400}}')
+        assert len(capture.events) == 0
+
+    def test_ignore_json_without_name(self):
+        capture = EventCapture()
+        capture.feed('{"ph":"B","ts":1000,"pid":1,"tid":1}')
         assert len(capture.events) == 0
 
 
@@ -130,54 +147,54 @@ class TestSpans:
         clock = FakeClock(10.0)
         capture = EventCapture(clock=clock)
 
-        capture.feed("T=0.001600 GPS_STARTED")
+        capture.feed(_b("gps", 1600))
         assert len(capture.spans) == 0
-        assert "GPS" in capture.pending
+        assert "gps" in capture.pending
 
         clock.advance(5.0)
-        capture.feed("T=5.001600 GPS_STOPPED")
+        capture.feed(_e("gps", 5001600))
 
         assert len(capture.spans) == 1
         span = capture.spans[0]
-        assert span.name == "GPS"
+        assert span.name == "gps"
         assert span.device_duration_s == pytest.approx(5.0)
         assert span.host_duration_s == pytest.approx(5.0)
-        assert "GPS" not in capture.pending
+        assert "gps" not in capture.pending
 
     def test_multiple_spans(self):
         capture = EventCapture()
 
-        capture.feed("T=0.000000 ALL_OFF_STARTED")
-        capture.feed("T=5.000000 ALL_OFF_STOPPED")
-        capture.feed("T=5.100000 GPS_STARTED")
-        capture.feed("T=10.100000 GPS_STOPPED")
-        capture.feed("T=10.200000 IMU_STARTED")
-        capture.feed("T=15.200000 IMU_STOPPED")
+        capture.feed(_b("all_off", 0))
+        capture.feed(_e("all_off", 5000000))
+        capture.feed(_b("gps", 5100000))
+        capture.feed(_e("gps", 10100000))
+        capture.feed(_b("imu", 10200000))
+        capture.feed(_e("imu", 15200000))
 
         assert len(capture.spans) == 3
-        assert [s.name for s in capture.spans] == ["ALL_OFF", "GPS", "IMU"]
+        assert [s.name for s in capture.spans] == ["all_off", "gps", "imu"]
 
     def test_nested_spans(self):
         """Outer scope wraps inner scopes (like peripheral_cycle wrapping all_off)."""
         capture = EventCapture()
 
-        capture.feed("T=0.000000 PERIPHERAL_CYCLE_STARTED")
-        capture.feed("T=0.100000 ALL_OFF_STARTED")
-        capture.feed("T=5.100000 ALL_OFF_STOPPED")
-        capture.feed("T=5.200000 GPS_STARTED")
-        capture.feed("T=10.200000 GPS_STOPPED")
-        capture.feed("T=10.300000 PERIPHERAL_CYCLE_STOPPED")
+        capture.feed(_b("peripheral_cycle", 0))
+        capture.feed(_b("all_off", 100000))
+        capture.feed(_e("all_off", 5100000))
+        capture.feed(_b("gps", 5200000))
+        capture.feed(_e("gps", 10200000))
+        capture.feed(_e("peripheral_cycle", 10300000))
 
         assert len(capture.spans) == 3
         names = [s.name for s in capture.spans]
-        assert "ALL_OFF" in names
-        assert "GPS" in names
-        assert "PERIPHERAL_CYCLE" in names
+        assert "all_off" in names
+        assert "gps" in names
+        assert "peripheral_cycle" in names
 
     def test_unmatched_stop(self):
         """STOP without START logs warning but doesn't crash."""
         capture = EventCapture()
-        capture.feed("T=0.001000 GPS_STOPPED")
+        capture.feed(_e("gps", 1000))
 
         assert len(capture.events) == 1
         assert len(capture.spans) == 0
@@ -186,9 +203,9 @@ class TestSpans:
         """Second START for same name replaces the first (with warning)."""
         capture = EventCapture()
 
-        capture.feed("T=0.001000 GPS_STARTED")
-        capture.feed("T=1.000000 GPS_STARTED")  # Duplicate
-        capture.feed("T=2.000000 GPS_STOPPED")
+        capture.feed(_b("gps", 1000))
+        capture.feed(_b("gps", 1000000))  # Duplicate
+        capture.feed(_e("gps", 2000000))
 
         assert len(capture.spans) == 1
         span = capture.spans[0]
@@ -205,12 +222,12 @@ class TestCallbacks:
         received: list[TraceEvent] = []
         capture = EventCapture(on_event=received.append)
 
-        capture.feed("T=0.001000 GPS_STARTED")
+        capture.feed(_b("gps", 1000))
         capture.feed("Regular log line")
-        capture.feed("T=5.001000 GPS_STOPPED")
+        capture.feed(_e("gps", 5001000))
 
         assert len(received) == 2
-        assert received[0].name == "GPS"
+        assert received[0].name == "gps"
         assert received[0].action == "STARTED"
         assert received[1].action == "STOPPED"
 
@@ -218,12 +235,12 @@ class TestCallbacks:
         received: list[EventSpan] = []
         capture = EventCapture(on_span=received.append)
 
-        capture.feed("T=0.001000 GPS_STARTED")
+        capture.feed(_b("gps", 1000))
         assert len(received) == 0
 
-        capture.feed("T=5.001000 GPS_STOPPED")
+        capture.feed(_e("gps", 5001000))
         assert len(received) == 1
-        assert received[0].name == "GPS"
+        assert received[0].name == "gps"
 
 
 # ── Event names ──────────────────────────────────────────────────────
@@ -233,11 +250,11 @@ class TestEventNames:
     def test_event_names(self):
         capture = EventCapture()
 
-        capture.feed("T=0.000000 GPS_STARTED")
-        capture.feed("T=1.000000 IMU_STARTED")
-        capture.feed("T=2.000000 GPS_STOPPED")
+        capture.feed(_b("gps", 0))
+        capture.feed(_b("imu", 1000000))
+        capture.feed(_e("gps", 2000000))
 
-        assert capture.event_names == {"GPS", "IMU"}
+        assert capture.event_names == {"gps", "imu"}
 
     def test_event_names_empty(self):
         capture = EventCapture()
@@ -251,9 +268,9 @@ class TestReset:
     def test_reset_clears_everything(self):
         capture = EventCapture()
 
-        capture.feed("T=0.001000 GPS_STARTED")
-        capture.feed("T=5.001000 GPS_STOPPED")
-        capture.feed("T=6.000000 IMU_STARTED")
+        capture.feed(_b("gps", 1000))
+        capture.feed(_e("gps", 5001000))
+        capture.feed(_b("imu", 6000000))
 
         assert len(capture.events) == 3
         assert len(capture.spans) == 1
@@ -281,10 +298,8 @@ class TestRealWorldOutput:
         lines = [
             "Starting peripheral cycle...",
             "power_profile: beginning peripheral cycle",
-            "T=1.234567 PERIPHERAL_CYCLE_STARTED",
             '{"ph":"B","ts":1234567,"name":"peripheral_cycle","pid":1,"tid":1}',
-            "power_profile: all off, holding for 5000 ms",
-            "T=1.234600 ALL_OFF_STARTED",
+            "T=1.234600 ALL_OFF_STARTED",  # legacy T= markers are ignored
             '{"ph":"B","ts":1234600,"name":"all_off","pid":1,"tid":1}',
         ]
 
@@ -292,26 +307,26 @@ class TestRealWorldOutput:
             clock.advance(0.01)
             capture.feed(line)
 
-        # Should only capture T= lines, not Chrome JSON
+        # Should capture Chrome JSON lines, not T= markers
         assert len(capture.events) == 2
-        assert capture.events[0].name == "PERIPHERAL_CYCLE"
-        assert capture.events[1].name == "ALL_OFF"
+        assert capture.events[0].name == "peripheral_cycle"
+        assert capture.events[1].name == "all_off"
 
     def test_full_cycle_spans(self):
-        """Full cycle: baseline → GPS → IMU → baseline."""
+        """Full cycle: baseline -> GPS -> IMU -> baseline."""
         capture = EventCapture()
 
         events = [
-            "T=0.000000 PERIPHERAL_CYCLE_STARTED",
-            "T=0.001000 ALL_OFF_STARTED",
-            "T=5.001000 ALL_OFF_STOPPED",
-            "T=5.010000 GPS_STARTED",
-            "T=10.010000 GPS_STOPPED",
-            "T=10.020000 IMU_STARTED",
-            "T=15.020000 IMU_STOPPED",
-            "T=15.030000 ALL_OFF_STARTED",
-            "T=20.030000 ALL_OFF_STOPPED",
-            "T=20.031000 PERIPHERAL_CYCLE_STOPPED",
+            _b("peripheral_cycle", 0),
+            _b("all_off", 1000),
+            _e("all_off", 5001000),
+            _b("gps", 5010000),
+            _e("gps", 10010000),
+            _b("imu", 10020000),
+            _e("imu", 15020000),
+            _b("all_off", 15030000),
+            _e("all_off", 20030000),
+            _e("peripheral_cycle", 20031000),
         ]
 
         for line in events:
@@ -320,13 +335,12 @@ class TestRealWorldOutput:
         assert len(capture.spans) == 5  # cycle, 2x all_off, gps, imu
 
         # Check peripheral durations
-        peripheral_spans = {s.name: s for s in capture.spans if s.name not in ("PERIPHERAL_CYCLE",)}
-        gps = [s for s in capture.spans if s.name == "GPS"][0]
-        imu = [s for s in capture.spans if s.name == "IMU"][0]
+        gps = [s for s in capture.spans if s.name == "gps"][0]
+        imu = [s for s in capture.spans if s.name == "imu"][0]
 
         assert gps.device_duration_s == pytest.approx(5.0)
         assert imu.device_duration_s == pytest.approx(5.0)
 
-        # ALL_OFF appears twice — both should be captured
-        all_off_spans = [s for s in capture.spans if s.name == "ALL_OFF"]
+        # all_off appears twice — both should be captured
+        all_off_spans = [s for s in capture.spans if s.name == "all_off"]
         assert len(all_off_spans) == 2

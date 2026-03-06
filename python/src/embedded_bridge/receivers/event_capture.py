@@ -1,7 +1,7 @@
-"""Capture T= event markers from embedded-tracer serial output.
+"""Capture Chrome JSON trace events from embedded-tracer serial output.
 
-Parses ``T=<seconds>.<microseconds> <NAME>_STARTED/STOPPED`` lines
-emitted by SerialTracer (with ppk2_markers=true). Maintains a log of
+Parses Chrome JSON lines emitted by SerialTracer — scope begin/end events
+(``ph:"B"``/``ph:"E"``) with microsecond timestamps. Maintains a log of
 timestamped events and pairs them into spans.
 
 Bridges between embedded-tracer serial output and ppk2-python's
@@ -11,35 +11,30 @@ Perfetto trace collection and PPK2 power attribution.
 Usage::
 
     capture = EventCapture()
-    capture.feed("T=0.001600 GPS_STARTED")
-    capture.feed("T=0.004200 GPS_STOPPED")
+    capture.feed('{"ph":"B","ts":1600,"name":"gps","pid":1,"tid":1}')
+    capture.feed('{"ph":"E","ts":4200,"name":"gps","pid":1,"tid":1}')
 
     for span in capture.spans:
         print(f"{span.name}: {span.duration_s:.3f}s")
 """
 
+import json
 import logging
-import re
 import time
 from dataclasses import dataclass, field
 from typing import Callable
 
 logger = logging.getLogger(__name__)
 
-# T=<seconds>.<microseconds> <NAME>_STARTED or T=<seconds>.<microseconds> <NAME>_STOPPED
-_T_PATTERN = re.compile(
-    r"^T=(\d+)\.(\d{6})\s+(\w+)_(STARTED|STOPPED)$"
-)
-
 
 @dataclass(frozen=True)
 class TraceEvent:
-    """A single T= event marker from the device.
+    """A single Chrome JSON trace event from the device.
 
     Args:
-        name: Event name (uppercased by firmware, e.g. "GPS", "IMU").
+        name: Event/scope name (e.g. "gps_fix", "imu_sample").
         action: "STARTED" or "STOPPED".
-        device_timestamp_s: Timestamp from the T= field (seconds).
+        device_timestamp_s: Timestamp from the ``ts`` field (converted to seconds).
         host_timestamp_s: ``time.monotonic()`` when the line was received.
     """
 
@@ -75,7 +70,7 @@ class EventSpan:
 
 
 class EventCapture:
-    """Receiver that captures T= event markers from embedded-tracer.
+    """Receiver that captures Chrome JSON trace events from embedded-tracer.
 
     Satisfies the ``Receiver`` protocol — feed it lines from any source.
 
@@ -104,8 +99,8 @@ class EventCapture:
     def feed(self, message: bytes | str) -> None:
         """Consume a line of device output.
 
-        Lines matching ``T=<ts> <NAME>_STARTED/STOPPED`` are captured.
-        All other lines are silently ignored.
+        Lines containing Chrome JSON with ``ph:"B"`` or ``ph:"E"`` are
+        captured. All other lines are silently ignored.
         """
         if isinstance(message, bytes):
             try:
@@ -114,16 +109,25 @@ class EventCapture:
                 return
 
         line = message.strip()
-        m = _T_PATTERN.match(line)
-        if not m:
+        if not line.startswith("{"):
             return
 
-        seconds = int(m.group(1))
-        microseconds = int(m.group(2))
-        name = m.group(3)
-        action = m.group(4)
+        try:
+            obj = json.loads(line)
+        except (json.JSONDecodeError, ValueError):
+            return
 
-        device_ts = seconds + microseconds / 1_000_000
+        ph = obj.get("ph")
+        if ph not in ("B", "E"):
+            return
+
+        name = obj.get("name")
+        if not name:
+            return
+
+        ts_us = obj.get("ts", 0)
+        action = "STARTED" if ph == "B" else "STOPPED"
+        device_ts = ts_us / 1_000_000  # µs → seconds
         host_ts = self._clock()
 
         event = TraceEvent(
