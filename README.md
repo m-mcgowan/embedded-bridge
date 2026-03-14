@@ -12,7 +12,7 @@ link (device or host).
 │    ↕                    │         │    ↕                    │
 │  MessageReader/Writer   │ ←─────→ │  MessageReader/Writer   │
 │    ↕                    │         │    ↕                    │
-│  Framing (HDLC/SLIP/…) │         │  Framing (HDLC/SLIP/…) │
+│  Framing (HDLC/SLIP/…)  │         │  Framing (HDLC/SLIP/…)  │
 │    ↕                    │         │    ↕                    │
 │  Transport              │         │  Transport              │
 └─────────────────────────┘         └─────────────────────────┘
