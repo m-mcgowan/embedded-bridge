@@ -19,6 +19,7 @@ add_executable(embedded_bridge_tests
     test_cobs.cpp
     test_message.cpp
     test_wire.cpp
+    test_multi_include.cpp
 )
 target_link_libraries(embedded_bridge_tests doctest embedded_bridge nlohmann_json::nlohmann_json)
 target_compile_features(embedded_bridge_tests PRIVATE cxx_std_17)

@@ -7,9 +7,6 @@
 
 namespace ebridge {
 
-/// Callback when a complete SLIP frame payload is ready.
-using FrameCallback = void (*)(void* ctx, const uint8_t* data, size_t len);
-
 // SLIP framing constants (RFC 1055)
 namespace slip {
 static constexpr uint8_t END = 0xC0;

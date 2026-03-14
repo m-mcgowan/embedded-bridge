@@ -8,9 +8,6 @@
 
 namespace ebridge {
 
-/// Callback when a complete, validated HDLC frame payload is ready.
-using FrameCallback = void (*)(void* ctx, const uint8_t* data, size_t len);
-
 // HDLC framing constants
 namespace hdlc {
 static constexpr uint8_t FLAG = 0x7E;

@@ -7,9 +7,6 @@
 
 namespace ebridge {
 
-/// Callback when a complete COBS frame payload is ready.
-using FrameCallback = void (*)(void* ctx, const uint8_t* data, size_t len);
-
 /// COBS (Consistent Overhead Byte Stuffing) frame decoder.
 ///
 /// Delimiter is 0x00. Feed raw bytes via process_byte().

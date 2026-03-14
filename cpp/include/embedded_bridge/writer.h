@@ -138,4 +138,7 @@ private:
 };
 #endif
 
+/// Callback when a complete frame payload is ready (used by all framers).
+using FrameCallback = void (*)(void* ctx, const uint8_t* data, size_t len);
+
 }  // namespace ebridge
