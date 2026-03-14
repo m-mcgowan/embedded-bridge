@@ -23,6 +23,24 @@ on the host** (tools, test runners, dashboards), but every implementation is
 platform-neutral — the C++ library compiles on desktop and embedded targets
 alike, and the Python library has no OS-specific dependencies.
 
+## Status
+
+| Feature | Design | Docs | Impl | Tests | Examples | Since | Updated |
+|---------|--------|------|------|-------|----------|-------|---------|
+| **Message protocol (C++)** | [design.md](docs/design.md) | | [message.h](cpp/include/embedded_bridge/message.h), [writer.h](cpp/include/embedded_bridge/writer.h) | | | | |
+| **Message protocol (Python)** | [design.md](docs/design.md) | | [message.py](python/src/embedded_bridge/framing/message.py) | [test_message](python/tests/test_message.py), [test_wire](python/tests/test_wire.py) | | | |
+| **HDLC framing (C++ & Python)** | [design.md](docs/design.md) | | [hdlc.h](cpp/include/embedded_bridge/framing/hdlc.h), [hdlc.py](python/src/embedded_bridge/framing/hdlc.py) | [test_hdlc](python/tests/test_hdlc.py) | | | |
+| **SLIP framing (C++ & Python)** | [design.md](docs/design.md) | | [slip.h](cpp/include/embedded_bridge/framing/slip.h), [slip.py](python/src/embedded_bridge/framing/slip.py) | [test_slip](python/tests/test_slip.py) | | | |
+| **COBS framing (C++ & Python)** | [design.md](docs/design.md) | | [cobs.h](cpp/include/embedded_bridge/framing/cobs.h), [cobs.py](python/src/embedded_bridge/framing/cobs.py) | [test_cobs](python/tests/test_cobs.py) | | | |
+| **CRC-16** | | | [crc16.h](cpp/include/embedded_bridge/detail/crc16.h), [crc16.py](python/src/embedded_bridge/framing/crc16.py) | [test_crc16](python/tests/test_crc16.py) | | | |
+| **Serial transport** | | | [serial.py](python/src/embedded_bridge/transport/serial.py) | [test_serial](python/tests/test_serial_transport.py) | | | |
+| **CrashDetector** | | | [crash_detector.py](python/src/embedded_bridge/receivers/crash_detector.py) | [test_crash](python/tests/test_crash_detector.py) | | | |
+| **EventCapture** | | | [event_capture.py](python/src/embedded_bridge/receivers/event_capture.py) | [test_events](python/tests/test_event_capture.py) | | | |
+| **SleepWakeMonitor** | | | [sleep_wake.py](python/src/embedded_bridge/receivers/sleep_wake.py) | [test_sleep](python/tests/test_sleep_wake.py) | | | |
+| **MemoryTracker** | | | [memory_tracker.py](python/src/embedded_bridge/receivers/memory_tracker.py) | [test_memory](python/tests/test_memory_tracker.py) | | | |
+| **Router** | | | [router.py](python/src/embedded_bridge/receivers/router.py) | [test_router](python/tests/test_router.py) | | | |
+| **TestSession** | | | [session.py](python/src/embedded_bridge/testing/session.py) | [test_session](python/tests/test_test_session.py) | | | |
+
 ## Language implementations
 
 Each language lives in its own top-level directory with its own build system,
