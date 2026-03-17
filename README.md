@@ -338,7 +338,7 @@ pyproject.toml
 **Install:**
 
 ```bash
-pip install embedded-bridge
+pip install "embedded-bridge @ git+https://github.com/m-mcgowan/embedded-bridge.git#subdirectory=python"
 ```
 
 **Run tests:**
