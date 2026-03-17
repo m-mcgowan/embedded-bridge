@@ -5,6 +5,8 @@ Follows [Keep a Changelog](https://keepachangelog.com/) conventions.
 
 ## [Unreleased]
 
+## [0.1.0] — 2026-03-17
+
 First release. Core wire protocol, framing, and host-side receivers.
 
 ### Added

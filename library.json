@@ -1,13 +1,20 @@
 {
     "name": "embedded-bridge",
     "version": "0.1.0",
-    "description": "Communication stack for embedded systems — message protocol, framing, and diagnostics",
+    "description": "Communication stack for embedded systems \u2014 message protocol, framing, and diagnostics",
     "keywords": "embedded, serial, message, framing, hdlc, slip, cobs",
     "license": "BSD-3-Clause",
-    "frameworks": ["arduino", "espidf"],
-    "platforms": ["espressif32"],
+    "frameworks": [
+        "arduino",
+        "espidf"
+    ],
+    "platforms": [
+        "espressif32"
+    ],
     "build": {
-        "srcFilter": ["-<*>"],
+        "srcFilter": [
+            "-<*>"
+        ],
         "includeDir": "cpp/include"
     }
 }
