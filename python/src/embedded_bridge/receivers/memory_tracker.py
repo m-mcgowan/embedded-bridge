@@ -124,7 +124,7 @@ class MemoryTracker:
     """Receiver that tracks per-test heap memory usage.
 
     Call ``set_current_test()`` when a new test starts (e.g. from a
-    ``ETST:TEST:START`` marker). The tracker pairs ``ETST:MEM:BEFORE``
+    ``ETST:CASE:START`` marker). The tracker pairs ``ETST:MEM:BEFORE``
     and ``ETST:MEM:AFTER`` lines with the current test name.
 
     Args:
