@@ -1,20 +1,26 @@
 """Per-test heap memory tracking for embedded devices.
 
-Parses ``PTR:MEM:*`` markers emitted by test frameworks that report heap
+Parses ``ETST:MEM:*`` markers emitted by test frameworks that report heap
 statistics before and after each test case. Identifies memory leaks
 by tracking the delta between pre- and post-test heap sizes.
 
 Wire format (from device)::
 
-    PTR:MEM:BEFORE free=<N> min=<N> *XX
-    PTR:MEM:AFTER free=<N> delta=<+/-N> min=<N> *XX
-    PTR:MEM:WARN leaked=<N> *XX
+    ETST:MEM:BEFORE free=<N> min=<N> *XX
+    ETST:MEM:AFTER free=<N> delta=<+/-N> min=<N> *XX
+    ETST:MEM:WARN leaked=<N> *XX
+
+The prefix is configurable via ``set_prefix()`` for compatibility
+with other protocol conventions.
 """
 
 import logging
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
+
+# Default protocol prefix. Overridable via set_prefix().
+_DEFAULT_PREFIX = "ETST:"
 
 # Import protocol parser from pio_test_runner if available,
 # otherwise use a minimal inline implementation.
@@ -23,9 +29,6 @@ try:
 except ImportError:
     import re as _re
 
-    _PREFIX = "PTR:"
-    _LINE_RE = _re.compile(r"^PTR:(\S+?)(?:\s+(.*?))?\s+\*([0-9A-Fa-f]{2})$")
-    _LINE_NO_CRC_RE = _re.compile(r"^PTR:(\S+?)(?:\s+(.*))?$")
     _TOKEN_RE = _re.compile(
         r'(\w+)="([^"]*)"' r"|(\w+)=(\S+)" r"|(\w+)"
     )
@@ -48,17 +51,35 @@ except ImportError:
                     crc = (crc << 1) & 0xFF
         return crc
 
+    # Compiled regexes are rebuilt when prefix changes.
+    _prefix = _DEFAULT_PREFIX
+    _line_re = None
+    _line_no_crc_re = None
+
+    def _compile_patterns(prefix):
+        global _prefix, _line_re, _line_no_crc_re
+        _prefix = prefix
+        escaped = _re.escape(prefix)
+        _line_re = _re.compile(
+            rf"^{escaped}(\S+?)(?:\s+(.*?))?\s+\*([0-9A-Fa-f]{{2}})$"
+        )
+        _line_no_crc_re = _re.compile(
+            rf"^{escaped}(\S+?)(?:\s+(.*))?$"
+        )
+
+    _compile_patterns(_DEFAULT_PREFIX)
+
     def parse_line(line):
         stripped = line.strip()
-        if not stripped.startswith(_PREFIX):
+        if not stripped.startswith(_prefix):
             return None
-        m = _LINE_RE.match(stripped)
+        m = _line_re.match(stripped)
         if m:
             tag, payload_str, crc_hex = m.group(1), m.group(2) or "", m.group(3)
             content = stripped[: stripped.rfind(f" *{crc_hex}")]
             valid = _crc8(content) == int(crc_hex, 16)
             return _ParsedTag(tag, payload_str, valid, stripped)
-        m = _LINE_NO_CRC_RE.match(stripped)
+        m = _line_no_crc_re.match(stripped)
         if m:
             return _ParsedTag(m.group(1), m.group(2) or "", None, stripped)
         return None
@@ -73,6 +94,19 @@ except ImportError:
             elif m.group(5) is not None:
                 result[m.group(5)] = True
         return result
+
+
+def set_prefix(prefix: str) -> None:
+    """Change the protocol prefix (e.g. "ETST:" or "PTR:").
+
+    Affects the inline fallback parser. When pio_test_runner.protocol
+    is available, update its PREFIX constant instead.
+    """
+    global _DEFAULT_PREFIX
+    _DEFAULT_PREFIX = prefix
+    # Update inline parser if it's the active one
+    if "_compile_patterns" in dir():
+        _compile_patterns(prefix)
 
 
 @dataclass
@@ -90,8 +124,8 @@ class MemoryTracker:
     """Receiver that tracks per-test heap memory usage.
 
     Call ``set_current_test()`` when a new test starts (e.g. from a
-    ``PTR:TEST:START`` marker). The tracker pairs ``PTR:MEM:BEFORE``
-    and ``PTR:MEM:AFTER`` lines with the current test name.
+    ``ETST:TEST:START`` marker). The tracker pairs ``ETST:MEM:BEFORE``
+    and ``ETST:MEM:AFTER`` lines with the current test name.
 
     Args:
         leak_threshold: Minimum negative delta (in bytes) to consider
@@ -136,7 +170,7 @@ class MemoryTracker:
             return
 
     def set_current_test(self, name: str) -> None:
-        """Set the test name for subsequent PTR:MEM lines."""
+        """Set the test name for subsequent MEM lines."""
         self._current_test = name
 
     @property
