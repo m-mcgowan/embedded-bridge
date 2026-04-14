@@ -6,5 +6,8 @@ __all__ = [
     "Transport",
 ]
 
-# SerialTransport is not imported here to avoid requiring pyserial.
-# Import directly: from embedded_bridge.transport.serial import SerialTransport
+# Concrete transports are not imported here to avoid requiring their
+# optional dependencies.  Import directly:
+#
+#   from embedded_bridge.transport.serial import SerialTransport
+#   from embedded_bridge.transport.websocket import WebSocketTransport
