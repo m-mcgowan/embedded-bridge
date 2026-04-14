@@ -22,78 +22,81 @@ logger = logging.getLogger(__name__)
 # Default protocol prefix. Overridable via set_prefix().
 _DEFAULT_PREFIX = "ETST:"
 
-# Import protocol parser from pio_test_runner if available,
-# otherwise use a minimal inline implementation.
+# Import protocol parser from etst (or legacy pio_test_runner) if
+# available, otherwise use a minimal inline implementation.
 try:
-    from pio_test_runner.protocol import parse_line, parse_payload
+    from etst.protocol import parse_line, parse_payload
 except ImportError:
-    import re as _re
+    try:
+        from pio_test_runner.protocol import parse_line, parse_payload
+    except ImportError:
+        import re as _re
 
-    _TOKEN_RE = _re.compile(
-        r'(\w+)="([^"]*)"' r"|(\w+)=(\S+)" r"|(\w+)"
-    )
-
-    class _ParsedTag:
-        def __init__(self, tag, payload_str, crc_valid, raw):
-            self.tag = tag
-            self.payload_str = payload_str
-            self.crc_valid = crc_valid
-            self.raw = raw
-
-    def _crc8(data: str) -> int:
-        crc = 0x00
-        for byte in data.encode("utf-8"):
-            crc ^= byte
-            for _ in range(8):
-                if crc & 0x80:
-                    crc = ((crc << 1) ^ 0x31) & 0xFF
-                else:
-                    crc = (crc << 1) & 0xFF
-        return crc
-
-    # Compiled regexes are rebuilt when prefix changes.
-    _prefix = _DEFAULT_PREFIX
-    _line_re = None
-    _line_no_crc_re = None
-
-    def _compile_patterns(prefix):
-        global _prefix, _line_re, _line_no_crc_re
-        _prefix = prefix
-        escaped = _re.escape(prefix)
-        _line_re = _re.compile(
-            rf"^{escaped}(\S+?)(?:\s+(.*?))?\s+\*([0-9A-Fa-f]{{2}})$"
-        )
-        _line_no_crc_re = _re.compile(
-            rf"^{escaped}(\S+?)(?:\s+(.*))?$"
+        _TOKEN_RE = _re.compile(
+            r'(\w+)="([^"]*)"' r"|(\w+)=(\S+)" r"|(\w+)"
         )
 
-    _compile_patterns(_DEFAULT_PREFIX)
+        class _ParsedTag:
+            def __init__(self, tag, payload_str, crc_valid, raw):
+                self.tag = tag
+                self.payload_str = payload_str
+                self.crc_valid = crc_valid
+                self.raw = raw
 
-    def parse_line(line):
-        stripped = line.strip()
-        if not stripped.startswith(_prefix):
+        def _crc8(data: str) -> int:
+            crc = 0x00
+            for byte in data.encode("utf-8"):
+                crc ^= byte
+                for _ in range(8):
+                    if crc & 0x80:
+                        crc = ((crc << 1) ^ 0x31) & 0xFF
+                    else:
+                        crc = (crc << 1) & 0xFF
+            return crc
+
+        # Compiled regexes are rebuilt when prefix changes.
+        _prefix = _DEFAULT_PREFIX
+        _line_re = None
+        _line_no_crc_re = None
+
+        def _compile_patterns(prefix):
+            global _prefix, _line_re, _line_no_crc_re
+            _prefix = prefix
+            escaped = _re.escape(prefix)
+            _line_re = _re.compile(
+                rf"^{escaped}(\S+?)(?:\s+(.*?))?\s+\*([0-9A-Fa-f]{{2}})$"
+            )
+            _line_no_crc_re = _re.compile(
+                rf"^{escaped}(\S+?)(?:\s+(.*))?$"
+            )
+
+        _compile_patterns(_DEFAULT_PREFIX)
+
+        def parse_line(line):
+            stripped = line.strip()
+            if not stripped.startswith(_prefix):
+                return None
+            m = _line_re.match(stripped)
+            if m:
+                tag, payload_str, crc_hex = m.group(1), m.group(2) or "", m.group(3)
+                content = stripped[: stripped.rfind(f" *{crc_hex}")]
+                valid = _crc8(content) == int(crc_hex, 16)
+                return _ParsedTag(tag, payload_str, valid, stripped)
+            m = _line_no_crc_re.match(stripped)
+            if m:
+                return _ParsedTag(m.group(1), m.group(2) or "", None, stripped)
             return None
-        m = _line_re.match(stripped)
-        if m:
-            tag, payload_str, crc_hex = m.group(1), m.group(2) or "", m.group(3)
-            content = stripped[: stripped.rfind(f" *{crc_hex}")]
-            valid = _crc8(content) == int(crc_hex, 16)
-            return _ParsedTag(tag, payload_str, valid, stripped)
-        m = _line_no_crc_re.match(stripped)
-        if m:
-            return _ParsedTag(m.group(1), m.group(2) or "", None, stripped)
-        return None
 
-    def parse_payload(payload_str):
-        result = {}
-        for m in _TOKEN_RE.finditer(payload_str):
-            if m.group(1) is not None:
-                result[m.group(1)] = m.group(2)
-            elif m.group(3) is not None:
-                result[m.group(3)] = m.group(4)
-            elif m.group(5) is not None:
-                result[m.group(5)] = True
-        return result
+        def parse_payload(payload_str):
+            result = {}
+            for m in _TOKEN_RE.finditer(payload_str):
+                if m.group(1) is not None:
+                    result[m.group(1)] = m.group(2)
+                elif m.group(3) is not None:
+                    result[m.group(3)] = m.group(4)
+                elif m.group(5) is not None:
+                    result[m.group(5)] = True
+            return result
 
 
 def set_prefix(prefix: str) -> None:
@@ -105,7 +108,7 @@ def set_prefix(prefix: str) -> None:
     global _DEFAULT_PREFIX
     _DEFAULT_PREFIX = prefix
     # Update inline parser if it's the active one
-    if "_compile_patterns" in dir():
+    if "_compile_patterns" in globals():
         _compile_patterns(prefix)
 
 

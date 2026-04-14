@@ -1,21 +1,28 @@
 """Tests for MemoryTracker receiver."""
 
-from embedded_bridge.receivers.memory_tracker import MemoryInfo, MemoryTracker
+from embedded_bridge.receivers.memory_tracker import (
+    MemoryInfo,
+    MemoryTracker,
+    set_prefix,
+)
 
 try:
-    from pio_test_runner.protocol import format_crc
+    from etst.protocol import format_crc
 except ImportError:
-    # Standalone: compute CRC inline (mirrors memory_tracker.py fallback)
-    def format_crc(content: str) -> str:
-        crc = 0x00
-        for byte in content.encode("utf-8"):
-            crc ^= byte
-            for _ in range(8):
-                if crc & 0x80:
-                    crc = ((crc << 1) ^ 0x31) & 0xFF
-                else:
-                    crc = (crc << 1) & 0xFF
-        return f"{content} *{crc:02X}"
+    try:
+        from pio_test_runner.protocol import format_crc
+    except ImportError:
+        # Standalone: compute CRC inline (mirrors memory_tracker.py fallback)
+        def format_crc(content: str) -> str:
+            crc = 0x00
+            for byte in content.encode("utf-8"):
+                crc ^= byte
+                for _ in range(8):
+                    if crc & 0x80:
+                        crc = ((crc << 1) ^ 0x31) & 0xFF
+                    else:
+                        crc = (crc << 1) & 0xFF
+            return f"{content} *{crc:02X}"
 
 
 def _crc(content: str) -> str:
@@ -115,3 +122,14 @@ class TestMemoryTracker:
         mt.set_current_test("Suite/test")
         mt.feed("ETST:MEM:BEFORE free=200000 min=180000 *00")
         assert mt.all_tests == {}
+
+    def test_set_prefix_changes_parser(self):
+        """set_prefix() should make the parser recognize a custom prefix."""
+        set_prefix("XTEST:")
+        try:
+            mt = MemoryTracker()
+            mt.set_current_test("Suite/test")
+            mt.feed("XTEST:MEM:BEFORE free=200000 min=180000")
+            assert mt.all_tests["Suite/test"].free_before == 200000
+        finally:
+            set_prefix("ETST:")
