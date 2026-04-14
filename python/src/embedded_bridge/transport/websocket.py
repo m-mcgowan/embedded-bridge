@@ -194,8 +194,20 @@ class WebSocketTransport:
             ) from e
 
     def is_connected(self) -> bool:
-        raise NotImplementedError
+        """Check if the WebSocket connection is open."""
+        return self._ws is not None
 
     @property
     def port_path(self) -> str | None:
         return self._uri
+
+    def __enter__(self) -> "WebSocketTransport":
+        self.connect()
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.disconnect()
+
+    def __repr__(self) -> str:
+        status = "connected" if self.is_connected() else "disconnected"
+        return f"WebSocketTransport({self._uri!r}, {status})"

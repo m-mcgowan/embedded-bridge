@@ -200,3 +200,76 @@ class TestWrite:
 
         with pytest.raises(ConnectionError, match="WebSocket write failed"):
             transport.write(b"data")
+
+
+# ── is_connected ─────────────────────────────────────────────────────
+
+
+class TestIsConnected:
+    def test_not_connected_initially(self):
+        transport = WebSocketTransport("ws://localhost:8765")
+        assert not transport.is_connected()
+
+    @patch("embedded_bridge.transport.websocket.ws_connect")
+    def test_connected_after_open(self, mock_connect):
+        mock_ws = MagicMock()
+        mock_connect.return_value = mock_ws
+
+        transport = WebSocketTransport("ws://localhost:8765")
+        transport.connect()
+        assert transport.is_connected()
+
+    @patch("embedded_bridge.transport.websocket.ws_connect")
+    def test_not_connected_after_disconnect(self, mock_connect):
+        mock_ws = MagicMock()
+        mock_connect.return_value = mock_ws
+
+        transport = WebSocketTransport("ws://localhost:8765")
+        transport.connect()
+        transport.disconnect()
+        assert not transport.is_connected()
+
+
+# ── port_path ────────────────────────────────────────────────────────
+
+
+class TestPortPath:
+    def test_port_path_returns_uri(self):
+        transport = WebSocketTransport("ws://localhost:8765")
+        assert transport.port_path == "ws://localhost:8765"
+
+
+# ── Context manager ──────────────────────────────────────────────────
+
+
+class TestContextManager:
+    @patch("embedded_bridge.transport.websocket.ws_connect")
+    def test_context_manager(self, mock_connect):
+        mock_ws = MagicMock()
+        mock_connect.return_value = mock_ws
+
+        with WebSocketTransport("ws://localhost:8765") as transport:
+            assert transport.port_path == "ws://localhost:8765"
+
+        mock_ws.close.assert_called_once()
+
+
+# ── repr ─────────────────────────────────────────────────────────────
+
+
+class TestRepr:
+    def test_repr_disconnected(self):
+        transport = WebSocketTransport("ws://localhost:8765")
+        r = repr(transport)
+        assert "ws://localhost:8765" in r
+        assert "disconnected" in r
+
+    @patch("embedded_bridge.transport.websocket.ws_connect")
+    def test_repr_connected(self, mock_connect):
+        mock_ws = MagicMock()
+        mock_connect.return_value = mock_ws
+
+        transport = WebSocketTransport("ws://localhost:8765")
+        transport.connect()
+        r = repr(transport)
+        assert "connected" in r
