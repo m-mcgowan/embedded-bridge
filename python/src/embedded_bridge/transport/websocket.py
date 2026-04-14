@@ -92,7 +92,79 @@ class WebSocketTransport:
         logger.info("Disconnected from %s", self._uri)
 
     def read(self, size: int = -1, timeout: float | None = None) -> bytes:
-        raise NotImplementedError
+        """Read bytes from the WebSocket.
+
+        WebSocket messages (text or binary) are buffered as raw bytes.
+        Text frames are UTF-8 encoded.
+
+        Args:
+            size: Max bytes to read.  ``-1`` means read all available.
+            timeout: Max seconds to wait for data.  ``None`` blocks
+                indefinitely.  ``0`` returns immediately with whatever
+                is buffered.
+
+        Returns:
+            Bytes read (may be empty if timeout expires with no data).
+
+        Raises:
+            ConnectionError: If not connected.
+        """
+        ws = self._ensure_connected()
+
+        # Serve from buffer if available
+        if self._buffer:
+            return self._drain_buffer(size)
+
+        # Nothing buffered — receive a WebSocket message
+        if timeout is not None:
+            deadline = time.monotonic() + timeout
+        else:
+            deadline = None
+
+        while True:
+            remaining = None
+            if deadline is not None:
+                remaining = max(0.0, deadline - time.monotonic())
+                if remaining == 0.0 and not self._buffer:
+                    return b""
+
+            try:
+                msg = ws.recv(timeout=remaining)
+                if isinstance(msg, str):
+                    self._buffer.extend(msg.encode("utf-8"))
+                else:
+                    self._buffer.extend(msg)
+                return self._drain_buffer(size)
+
+            except TimeoutError:
+                return b""
+            except ConnectionClosed as e:
+                if self._reconnect:
+                    logger.warning(
+                        "Connection closed, attempting reconnect: %s", e
+                    )
+                    self._do_reconnect()
+                    ws = self._ensure_connected()
+                else:
+                    raise ConnectionError(
+                        f"WebSocket connection closed: {e}"
+                    ) from e
+
+    def _drain_buffer(self, size: int) -> bytes:
+        """Extract bytes from the internal buffer."""
+        if size == -1 or size >= len(self._buffer):
+            data = bytes(self._buffer)
+            self._buffer.clear()
+            return data
+        data = bytes(self._buffer[:size])
+        del self._buffer[:size]
+        return data
+
+    def _ensure_connected(self):
+        """Return the open WebSocket or raise ConnectionError."""
+        if self._ws is None:
+            raise ConnectionError("Not connected. Call connect() first.")
+        return self._ws
 
     def write(self, data: bytes) -> None:
         raise NotImplementedError

@@ -83,3 +83,84 @@ class TestConnectDisconnect:
         transport.disconnect()
 
         assert len(transport._buffer) == 0
+
+
+# ── Read ─────────────────────────────────────────────────────────────
+
+
+class TestRead:
+    @patch("embedded_bridge.transport.websocket.ws_connect")
+    def test_read_text_frame(self, mock_connect):
+        """Text frames are decoded to bytes via UTF-8."""
+        mock_ws = MagicMock()
+        mock_ws.recv.return_value = '{"cmd":"ping"}'
+        mock_connect.return_value = mock_ws
+
+        transport = WebSocketTransport("ws://localhost:8765")
+        transport.connect()
+        data = transport.read(timeout=1.0)
+
+        assert data == b'{"cmd":"ping"}'
+
+    @patch("embedded_bridge.transport.websocket.ws_connect")
+    def test_read_binary_frame(self, mock_connect):
+        """Binary frames are returned as-is."""
+        mock_ws = MagicMock()
+        mock_ws.recv.return_value = b"\x01\x02\x03"
+        mock_connect.return_value = mock_ws
+
+        transport = WebSocketTransport("ws://localhost:8765")
+        transport.connect()
+        data = transport.read(timeout=1.0)
+
+        assert data == b"\x01\x02\x03"
+
+    @patch("embedded_bridge.transport.websocket.ws_connect")
+    def test_read_with_size_limit(self, mock_connect):
+        """read(size=N) returns at most N bytes, buffers the rest."""
+        mock_ws = MagicMock()
+        mock_ws.recv.return_value = b"hello world"
+        mock_connect.return_value = mock_ws
+
+        transport = WebSocketTransport("ws://localhost:8765")
+        transport.connect()
+
+        first = transport.read(size=5, timeout=1.0)
+        assert first == b"hello"
+
+        # Remaining bytes served from buffer without another recv
+        second = transport.read(size=6, timeout=1.0)
+        assert second == b" world"
+        assert mock_ws.recv.call_count == 1  # Only one recv needed
+
+    @patch("embedded_bridge.transport.websocket.ws_connect")
+    def test_read_timeout_returns_empty(self, mock_connect):
+        """Read returns empty bytes when timeout expires with no data."""
+        mock_ws = MagicMock()
+        mock_ws.recv.side_effect = TimeoutError
+        mock_connect.return_value = mock_ws
+
+        transport = WebSocketTransport("ws://localhost:8765")
+        transport.connect()
+        data = transport.read(timeout=0.1)
+
+        assert data == b""
+
+    def test_read_not_connected_raises(self):
+        transport = WebSocketTransport("ws://localhost:8765")
+        with pytest.raises(ConnectionError, match="Not connected"):
+            transport.read(timeout=0)
+
+    @patch("embedded_bridge.transport.websocket.ws_connect")
+    def test_read_serves_buffer_before_recv(self, mock_connect):
+        """Buffered data is returned without calling recv."""
+        mock_ws = MagicMock()
+        mock_connect.return_value = mock_ws
+
+        transport = WebSocketTransport("ws://localhost:8765")
+        transport.connect()
+        transport._buffer.extend(b"buffered")
+
+        data = transport.read(timeout=1.0)
+        assert data == b"buffered"
+        mock_ws.recv.assert_not_called()
