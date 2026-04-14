@@ -167,7 +167,31 @@ class WebSocketTransport:
         return self._ws
 
     def write(self, data: bytes) -> None:
-        raise NotImplementedError
+        """Write bytes to the WebSocket as a binary frame.
+
+        Args:
+            data: Bytes to send.
+
+        Raises:
+            ConnectionError: If not connected or write fails.
+        """
+        ws = self._ensure_connected()
+        try:
+            ws.send(data)
+        except ConnectionClosed as e:
+            if self._reconnect:
+                logger.warning("Write error, attempting reconnect: %s", e)
+                self._do_reconnect()
+                ws = self._ensure_connected()
+                ws.send(data)
+            else:
+                raise ConnectionError(
+                    f"WebSocket write failed: {e}"
+                ) from e
+        except WebSocketException as e:
+            raise ConnectionError(
+                f"WebSocket write failed: {e}"
+            ) from e
 
     def is_connected(self) -> bool:
         raise NotImplementedError

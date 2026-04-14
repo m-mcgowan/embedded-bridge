@@ -164,3 +164,39 @@ class TestRead:
         data = transport.read(timeout=1.0)
         assert data == b"buffered"
         mock_ws.recv.assert_not_called()
+
+
+# ── Write ────────────────────────────────────────────────────────────
+
+
+class TestWrite:
+    @patch("embedded_bridge.transport.websocket.ws_connect")
+    def test_write_sends_data(self, mock_connect):
+        mock_ws = MagicMock()
+        mock_connect.return_value = mock_ws
+
+        transport = WebSocketTransport("ws://localhost:8765")
+        transport.connect()
+        transport.write(b'{"cmd":"ping"}\n')
+
+        mock_ws.send.assert_called_once_with(b'{"cmd":"ping"}\n')
+
+    def test_write_not_connected_raises(self):
+        transport = WebSocketTransport("ws://localhost:8765")
+        with pytest.raises(ConnectionError, match="Not connected"):
+            transport.write(b"data")
+
+    @patch("embedded_bridge.transport.websocket.ws_connect")
+    def test_write_connection_closed_raises(self, mock_connect):
+        """Write raises ConnectionError when connection is lost (no reconnect)."""
+        from websockets.exceptions import ConnectionClosed
+
+        mock_ws = MagicMock()
+        mock_ws.send.side_effect = ConnectionClosed(None, None)
+        mock_connect.return_value = mock_ws
+
+        transport = WebSocketTransport("ws://localhost:8765")
+        transport.connect()
+
+        with pytest.raises(ConnectionError, match="WebSocket write failed"):
+            transport.write(b"data")
