@@ -64,10 +64,32 @@ class WebSocketTransport:
         self._buffer = bytearray()
 
     def connect(self) -> None:
-        raise NotImplementedError
+        """Open the WebSocket connection.
+
+        Raises:
+            ConnectionError: If the connection cannot be established.
+        """
+        if self._ws is not None:
+            return
+
+        logger.info("Connecting to %s", self._uri)
+        try:
+            self._ws = ws_connect(self._uri, open_timeout=self._open_timeout)
+        except (WebSocketException, OSError, TimeoutError) as e:
+            raise ConnectionError(
+                f"Failed to connect to {self._uri}: {e}"
+            ) from e
 
     def disconnect(self) -> None:
-        raise NotImplementedError
+        """Close the WebSocket connection."""
+        if self._ws is not None:
+            try:
+                self._ws.close()
+            except Exception:
+                pass
+            self._ws = None
+        self._buffer.clear()
+        logger.info("Disconnected from %s", self._uri)
 
     def read(self, size: int = -1, timeout: float | None = None) -> bytes:
         raise NotImplementedError
