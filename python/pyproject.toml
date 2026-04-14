@@ -30,6 +30,9 @@ dependencies = []
 serial = [
     "pyserial>=3.5",
 ]
+websocket = [
+    "websockets>=12.0",
+]
 dev = [
     "pytest>=7.0",
     "pytest-timeout>=2.0",
