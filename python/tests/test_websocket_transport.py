@@ -273,3 +273,109 @@ class TestRepr:
         transport.connect()
         r = repr(transport)
         assert "connected" in r
+
+
+# ── Reconnect ────────────────────────────────────────────────────────
+
+
+class TestReconnect:
+    @patch("embedded_bridge.transport.websocket.time")
+    @patch("embedded_bridge.transport.websocket.ws_connect")
+    def test_reconnect_on_read_connection_closed(self, mock_connect, mock_time):
+        """With reconnect=True, a ConnectionClosed during read triggers reconnect."""
+        from websockets.exceptions import ConnectionClosed
+
+        # First connection: recv raises ConnectionClosed
+        mock_ws1 = MagicMock()
+        mock_ws1.recv.side_effect = ConnectionClosed(None, None)
+
+        # Second connection: recv succeeds
+        mock_ws2 = MagicMock()
+        mock_ws2.recv.return_value = b"hello"
+
+        mock_connect.side_effect = [mock_ws1, mock_ws2]
+        # monotonic calls:
+        #   read(): deadline setup, remaining check (loop iter 1)
+        #   _do_reconnect(): deadline setup, while-loop condition check
+        #   read(): remaining check (loop iter 2, after reconnect)
+        mock_time.monotonic.side_effect = [0.0, 0.0, 0.5, 0.5, 0.5]
+        mock_time.sleep = MagicMock()
+
+        transport = WebSocketTransport(
+            "ws://localhost:8765",
+            reconnect=True,
+            reconnect_timeout=5.0,
+        )
+        transport.connect()
+        data = transport.read(timeout=1.0)
+
+        assert data == b"hello"
+        assert mock_connect.call_count == 2
+
+    @patch("embedded_bridge.transport.websocket.ws_connect")
+    def test_no_reconnect_raises_on_read_connection_closed(self, mock_connect):
+        """With reconnect=False, ConnectionClosed during read raises ConnectionError."""
+        from websockets.exceptions import ConnectionClosed
+
+        mock_ws = MagicMock()
+        mock_ws.recv.side_effect = ConnectionClosed(None, None)
+        mock_connect.return_value = mock_ws
+
+        transport = WebSocketTransport("ws://localhost:8765")
+        transport.connect()
+
+        with pytest.raises(ConnectionError, match="WebSocket connection closed"):
+            transport.read(timeout=1.0)
+
+    @patch("embedded_bridge.transport.websocket.time")
+    @patch("embedded_bridge.transport.websocket.ws_connect")
+    def test_reconnect_on_write_connection_closed(self, mock_connect, mock_time):
+        """With reconnect=True, a ConnectionClosed during write triggers reconnect."""
+        from websockets.exceptions import ConnectionClosed
+
+        # First connection: send raises ConnectionClosed
+        mock_ws1 = MagicMock()
+        mock_ws1.send.side_effect = ConnectionClosed(None, None)
+
+        # Second connection: send succeeds
+        mock_ws2 = MagicMock()
+        mock_connect.side_effect = [mock_ws1, mock_ws2]
+        mock_time.monotonic.side_effect = [0.0, 0.0, 0.5]
+        mock_time.sleep = MagicMock()
+
+        transport = WebSocketTransport(
+            "ws://localhost:8765",
+            reconnect=True,
+            reconnect_timeout=5.0,
+        )
+        transport.connect()
+        transport.write(b"data")
+
+        mock_ws2.send.assert_called_once_with(b"data")
+
+    @patch("embedded_bridge.transport.websocket.time")
+    @patch("embedded_bridge.transport.websocket.ws_connect")
+    def test_reconnect_timeout_exhausted(self, mock_connect, mock_time):
+        """Reconnect gives up after timeout and raises ConnectionError."""
+        from websockets.exceptions import ConnectionClosed
+
+        mock_ws1 = MagicMock()
+        mock_ws1.recv.side_effect = ConnectionClosed(None, None)
+        mock_connect.side_effect = [
+            mock_ws1,  # initial connect
+            OSError("refused"),  # reconnect attempt 1
+            OSError("refused"),  # reconnect attempt 2
+        ]
+        # monotonic: read deadline, reconnect deadline, attempt1, attempt2 (past deadline)
+        mock_time.monotonic.side_effect = [0.0, 0.0, 0.5, 31.0]
+        mock_time.sleep = MagicMock()
+
+        transport = WebSocketTransport(
+            "ws://localhost:8765",
+            reconnect=True,
+            reconnect_timeout=30.0,
+        )
+        transport.connect()
+
+        with pytest.raises(ConnectionError, match="Failed to reconnect"):
+            transport.read(timeout=1.0)

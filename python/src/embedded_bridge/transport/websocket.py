@@ -166,6 +166,32 @@ class WebSocketTransport:
             raise ConnectionError("Not connected. Call connect() first.")
         return self._ws
 
+    def _do_reconnect(self) -> None:
+        """Attempt to reconnect within the configured timeout."""
+        self.disconnect()
+
+        deadline = time.monotonic() + self._reconnect_timeout
+        attempt = 0
+
+        while time.monotonic() < deadline:
+            attempt += 1
+            try:
+                logger.info("Reconnect attempt %d: %s", attempt, self._uri)
+                self._ws = ws_connect(
+                    self._uri, open_timeout=self._open_timeout
+                )
+                self._buffer.clear()
+                logger.info("Reconnected to %s", self._uri)
+                return
+            except (WebSocketException, OSError, TimeoutError) as e:
+                logger.debug("Reconnect attempt %d failed: %s", attempt, e)
+                time.sleep(self._reconnect_interval)
+
+        raise ConnectionError(
+            f"Failed to reconnect to '{self._uri}' "
+            f"after {self._reconnect_timeout}s ({attempt} attempts)"
+        )
+
     def write(self, data: bytes) -> None:
         """Write bytes to the WebSocket as a binary frame.
 
