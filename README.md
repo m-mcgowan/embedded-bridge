@@ -34,6 +34,7 @@ alike, and the Python library has no OS-specific dependencies.
 | **COBS framing (C++ & Python)** | [design.md](docs/design.md) | | [cobs.h](cpp/include/embedded_bridge/framing/cobs.h), [cobs.py](python/src/embedded_bridge/framing/cobs.py) | [test_cobs](python/tests/test_cobs.py) | | | |
 | **CRC-16** | | | [crc16.h](cpp/include/embedded_bridge/detail/crc16.h), [crc16.py](python/src/embedded_bridge/framing/crc16.py) | [test_crc16](python/tests/test_crc16.py) | | | |
 | **Serial transport** | | | [serial.py](python/src/embedded_bridge/transport/serial.py) | [test_serial](python/tests/test_serial_transport.py) | | | |
+| **WebSocket transport** | | | [websocket.py](python/src/embedded_bridge/transport/websocket.py) | [test_websocket](python/tests/test_websocket_transport.py), [integration](python/tests/integration/test_websocket_transport_integration.py) | | | |
 | **CrashDetector** | | | [crash_detector.py](python/src/embedded_bridge/receivers/crash_detector.py) | [test_crash](python/tests/test_crash_detector.py) | | | |
 | **EventCapture** | | | [event_capture.py](python/src/embedded_bridge/receivers/event_capture.py) | [test_events](python/tests/test_event_capture.py) | | | |
 | **SleepWakeMonitor** | | | [sleep_wake.py](python/src/embedded_bridge/receivers/sleep_wake.py) | [test_sleep](python/tests/test_sleep_wake.py) | | | |
@@ -206,6 +207,27 @@ monitor.on_wake = lambda: print("Awake")
 
 Detects sleep via serial patterns and USB-CDC port disappearance.
 
+### Connect via WebSocket bridge
+
+Talk to a device over a WebSocket — either through a serial-to-WebSocket
+relay (e.g. [embedded-menu](https://github.com/m-mcgowan/embedded-menu)'s
+browser dashboard bridge) or to a WebSocket endpoint hosted on the device
+itself.
+
+```python
+from embedded_bridge.transport.websocket import WebSocketTransport
+
+with WebSocketTransport("ws://localhost:8765") as transport:
+    transport.write(b'{"cmd":"status"}\n')
+    data = transport.read(timeout=1.0)
+    print(data.decode())
+```
+
+Text and binary frames are both decoded to `bytes`, so the rest of the
+stack (framing, receivers, `TestSession`) works identically whether the
+link is serial or WebSocket. Pass `reconnect=True` to auto-recover from
+server-side drops.
+
 ### Route mixed output to multiple receivers
 
 ```python
@@ -240,7 +262,7 @@ The stack is layered with each layer independent of the others:
 |-------|-----|--------|
 | **Message protocol** | MessageReader/Writer | MessageReader/Writer |
 | **Framing** | HDLC, SLIP, COBS | HDLC, SLIP, COBS |
-| **Transport** | Serial, USB CDC | SerialTransport |
+| **Transport** | Serial, USB CDC | SerialTransport, WebSocketTransport |
 | **Diagnostics** | — | CrashDetector, EventCapture, SleepWakeMonitor |
 
 - Framing is optional — skip it on reliable transports
@@ -306,8 +328,9 @@ cpp/test.sh
 
 ## Python (`python/`)
 
-Python 3.10+. No required dependencies (pyserial optional for serial
-transport).
+Python 3.10+. No required dependencies. `pyserial` is optional for
+`SerialTransport` (`pip install embedded-bridge[serial]`); `websockets`
+is optional for `WebSocketTransport` (`pip install embedded-bridge[websocket]`).
 
 Includes the core wire protocol (message reader/writer, framing, CRC-16)
 plus host-side utilities: serial transport, crash detection, sleep/wake
@@ -323,6 +346,7 @@ src/embedded_bridge/
         base.py                  — Framer protocol
     transport/
         serial.py                — SerialTransport (pyserial)
+        websocket.py             — WebSocketTransport (websockets)
     receivers/
         crash_detector.py        — Crash/hang detection
         event_capture.py         — Timestamped event markers

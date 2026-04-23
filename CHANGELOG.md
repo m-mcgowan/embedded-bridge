@@ -5,6 +5,13 @@ Follows [Keep a Changelog](https://keepachangelog.com/) conventions.
 
 ## [Unreleased]
 
+### Added
+- **WebSocketTransport** — synchronous WebSocket transport using
+  `websockets.sync.client`. Receives text and binary frames, buffers them
+  as raw bytes for the `Transport` byte-stream interface, and supports
+  reconnect on connection loss. Optional dependency:
+  `pip install embedded-bridge[websocket]`.
+
 ## [0.1.0] — 2026-03-17
 
 First release. Core wire protocol, framing, and host-side receivers.
