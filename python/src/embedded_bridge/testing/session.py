@@ -289,6 +289,15 @@ class TestSession:
                     outcome.markers["SLEEP"] = host_ts
                     logger.info("SLEEP marker: %s seconds", duration)
 
+                    # Send ACK to signal the device can enter sleep.
+                    # Firmware waits for ACK before calling esp_deep_sleep_start()
+                    # so measurement setup completes before USB-CDC drops.
+                    try:
+                        from .protocol import ACK
+                        self._transport.write(ACK)
+                    except Exception as e:
+                        logger.warning("Failed to send sleep ACK: %s", e)
+
                     # Disconnect transport — device will enter deep sleep.
                     try:
                         self._transport.disconnect()

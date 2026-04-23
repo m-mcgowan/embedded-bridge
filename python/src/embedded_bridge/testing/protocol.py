@@ -5,6 +5,10 @@ to avoid collision with interactive menu keys:
 
 - SOH (\\x01): "list tests" — device responds with test_catalog JSON
 - STX (\\x02): "run test" — followed by test ID and newline
+- ETX (\\x03): "configure fixture" — followed by JSON and newline
+- ACK (\\x06): "sleep acknowledged" — sent by host after SLEEP: marker to
+  signal the device can enter deep sleep. Allows the host to complete
+  measurement setup before the device drops USB-CDC.
 
 Firmware emits structured markers during test execution:
 
@@ -19,6 +23,7 @@ T= markers (timing-critical):
     T=<ts> PPK_START
     T=<ts> PPK_STOP
     T=<ts> SLEEP:<duration_seconds>
+    T=<ts> SLEEP_ACK:<0|1>       — firmware reports ACK receipt status
 """
 
 import json
@@ -29,6 +34,7 @@ from typing import Any
 SOH = b"\x01"  # List tests
 STX = b"\x02"  # Run test (followed by id + newline)
 ETX = b"\x03"  # Configure fixture (followed by JSON + newline)
+ACK = b"\x06"  # Sleep acknowledge (host → device after SLEEP: marker)
 
 # T= marker patterns for protocol-specific events.
 # These extend the existing T=<ts> <NAME>_STARTED/STOPPED format used by

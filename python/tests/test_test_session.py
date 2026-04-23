@@ -216,6 +216,31 @@ class TestMonitor:
         # Status will be timeout since we never get TEST_STOPPED
         assert outcome.status == "timeout"
 
+    def test_monitor_sends_ack_on_sleep_marker(self):
+        """Host sends ACK (0x06) to device after SLEEP: marker to confirm
+        measurement setup is ready. Firmware waits for this before calling
+        esp_deep_sleep_start()."""
+        from embedded_bridge.testing.protocol import ACK
+
+        transport = FakeTransport([
+            b"T=200 PPK_START\n",
+            b"T=210 SLEEP:30\n",
+        ])
+
+        session = TestSession(transport)
+        session.monitor("sleep_w2", timeout=0.5)
+
+        # Verify the ACK byte was sent
+        assert ACK in transport._written, (
+            f"Expected ACK ({ACK!r}) to be sent after SLEEP: marker. "
+            f"Got writes: {transport._written}"
+        )
+
+    def test_ack_constant_is_documented_value(self):
+        """ACK is ASCII ACK (0x06) per USB/serial convention."""
+        from embedded_bridge.testing.protocol import ACK
+        assert ACK == b"\x06"
+
     def test_monitor_timeout(self):
         transport = FakeTransport([b"no test_stopped\n"])
         session = TestSession(transport)
