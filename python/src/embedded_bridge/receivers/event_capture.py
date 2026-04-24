@@ -30,8 +30,16 @@ logger = logging.getLogger(__name__)
 # every 2**32 µs ≈ 71.58 minutes of continuous tracer activity. The library
 # is deliberately wrap-unaware on-device (would need shared state with race
 # hazards across tasks). Host-side wrap detection restores monotonicity.
+#
+# Only a *large* backwards step counts as a wrap — on dual-core ESP32 two
+# tasks on different cores can emit events whose timestamps arrive at the
+# Serial line with slight backwards skew. Threshold: half the wrap period
+# (2**31 µs ≈ 35.8 min). Real wraps are always close to -2**32; jitter
+# is always a few ms.
+#
 # See embedded-trace/docs/design.md#timestamp-wrap.
 _TIMESTAMP_WRAP_US = 1 << 32
+_WRAP_THRESHOLD_US = 1 << 31
 
 
 @dataclass(frozen=True)
@@ -137,12 +145,15 @@ class EventCapture:
             return
 
         raw_ts_us = obj.get("ts", 0)
-        # Detect uint32_t wrap: if raw ts went backwards, the device timer
-        # rolled over to zero. Add 2**32 to every subsequent event.
-        if self._last_raw_ts_us is not None and raw_ts_us < self._last_raw_ts_us:
+        # Detect uint32_t wrap: only a *large* backwards step counts, to
+        # avoid false wraps from dual-core jitter. See _WRAP_THRESHOLD_US.
+        if (
+            self._last_raw_ts_us is not None
+            and raw_ts_us - self._last_raw_ts_us < -_WRAP_THRESHOLD_US
+        ):
             self._wrap_count += 1
             logger.info(
-                "EventCapture: timestamp wrap detected (raw %d < previous %d) — "
+                "EventCapture: timestamp wrap detected (raw %d vs previous %d) — "
                 "wrap count now %d, adding %d µs to subsequent events",
                 raw_ts_us,
                 self._last_raw_ts_us,

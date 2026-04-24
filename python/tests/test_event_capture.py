@@ -385,15 +385,42 @@ class TestTimestampWrap:
         assert capture.spans[0].device_duration_s == pytest.approx(1.5)
 
     def test_multiple_wraps_accumulate(self):
+        # Each wrap must be a *large* backwards step (> 2**31 µs).
+        # Simulate two full rollovers: near-end → near-start → near-end → near-start.
         capture = EventCapture()
-        # ts resets twice during the session
-        for i, ts in enumerate([1_000, 4_000_000_000, 2_000, 100]):
+        raw_ts = [
+            1_000,                # start of period 1
+            WRAP - 1_000,         # near end of period 1
+            1_000,                # wrapped → period 2 (wrap 1)
+            WRAP - 1_000,         # near end of period 2
+            1_000,                # wrapped → period 3 (wrap 2)
+        ]
+        for i, ts in enumerate(raw_ts):
             capture.feed(_b(f"s{i}", ts))
 
-        expected_adjusted_us = [1_000, 4_000_000_000, 2_000 + WRAP, 100 + 2 * WRAP]
+        expected_us = [
+            1_000,
+            WRAP - 1_000,
+            1_000 + WRAP,
+            WRAP - 1_000 + WRAP,
+            1_000 + 2 * WRAP,
+        ]
         observed = [e.device_timestamp_s * 1_000_000 for e in capture.events]
-        for obs, exp in zip(observed, expected_adjusted_us):
+        for obs, exp in zip(observed, expected_us):
             assert obs == pytest.approx(exp)
+
+    def test_small_backwards_step_is_not_wrap(self):
+        # Dual-core ESP32: events from different cores can arrive with
+        # small backwards skew. Threshold: only backwards steps > 2**31 µs
+        # (~35.8 min) count as a wrap.
+        capture = EventCapture()
+        capture.feed(_b("gps", 1_000_500))   # from core A
+        capture.feed(_b("imu", 1_000_000))   # from core B, 500 µs behind — NOT a wrap
+        capture.feed(_b("gps", 2_000_000))
+
+        ts_values = [e.device_timestamp_s for e in capture.events]
+        # Raw values passed through unchanged; no +2**32 anywhere.
+        assert ts_values == [pytest.approx(1.0005), pytest.approx(1.0), pytest.approx(2.0)]
 
     def test_wrap_does_not_trigger_on_equal_timestamps(self):
         # Equal ts is common for back-to-back events (same sample). Not a wrap.
@@ -405,8 +432,10 @@ class TestTimestampWrap:
         assert all(e.device_timestamp_s == 0.5 for e in capture.events)
 
     def test_wrap_produces_monotonic_stream(self):
-        # Feed a mix of events spanning a wrap; resulting device_timestamp_s
-        # must be strictly non-decreasing.
+        # Feed a mix of events spanning a single wrap; resulting
+        # device_timestamp_s must be strictly non-decreasing. The
+        # pre-wrap tail is close to 2**32, the post-wrap start is small;
+        # the step between WRAP - 5 and 0 is a wrap (large backwards).
         capture = EventCapture()
         raw = [100, 2_000_000, WRAP - 10, WRAP - 5, 0, 100, 1_000_000]
         for i, ts in enumerate(raw):
