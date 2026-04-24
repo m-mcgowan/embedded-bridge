@@ -26,6 +26,13 @@ from typing import Callable
 
 logger = logging.getLogger(__name__)
 
+# SerialTracer emits uint32_t µs timestamps from embedded-trace; they wrap
+# every 2**32 µs ≈ 71.58 minutes of continuous tracer activity. The library
+# is deliberately wrap-unaware on-device (would need shared state with race
+# hazards across tasks). Host-side wrap detection restores monotonicity.
+# See embedded-trace/docs/design.md#timestamp-wrap.
+_TIMESTAMP_WRAP_US = 1 << 32
+
 
 @dataclass(frozen=True)
 class TraceEvent:
@@ -95,6 +102,10 @@ class EventCapture:
         self._spans: list[EventSpan] = []
         # Pending START events keyed by name (most recent wins)
         self._pending: dict[str, TraceEvent] = {}
+        # Wrap detection: uint32_t µs timestamps wrap every ~71.58 min.
+        # See _TIMESTAMP_WRAP_US.
+        self._last_raw_ts_us: int | None = None
+        self._wrap_count: int = 0
 
     def feed(self, message: bytes | str) -> None:
         """Consume a line of device output.
@@ -125,9 +136,24 @@ class EventCapture:
         if not name:
             return
 
-        ts_us = obj.get("ts", 0)
+        raw_ts_us = obj.get("ts", 0)
+        # Detect uint32_t wrap: if raw ts went backwards, the device timer
+        # rolled over to zero. Add 2**32 to every subsequent event.
+        if self._last_raw_ts_us is not None and raw_ts_us < self._last_raw_ts_us:
+            self._wrap_count += 1
+            logger.info(
+                "EventCapture: timestamp wrap detected (raw %d < previous %d) — "
+                "wrap count now %d, adding %d µs to subsequent events",
+                raw_ts_us,
+                self._last_raw_ts_us,
+                self._wrap_count,
+                self._wrap_count * _TIMESTAMP_WRAP_US,
+            )
+        self._last_raw_ts_us = raw_ts_us
+        adjusted_ts_us = raw_ts_us + self._wrap_count * _TIMESTAMP_WRAP_US
+
         action = "STARTED" if ph == "B" else "STOPPED"
-        device_ts = ts_us / 1_000_000  # µs → seconds
+        device_ts = adjusted_ts_us / 1_000_000  # µs → seconds
         host_ts = self._clock()
 
         event = TraceEvent(
@@ -188,3 +214,5 @@ class EventCapture:
         self._events.clear()
         self._spans.clear()
         self._pending.clear()
+        self._last_raw_ts_us = None
+        self._wrap_count = 0

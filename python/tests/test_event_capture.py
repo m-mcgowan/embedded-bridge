@@ -344,3 +344,73 @@ class TestRealWorldOutput:
         # all_off appears twice — both should be captured
         all_off_spans = [s for s in capture.spans if s.name == "all_off"]
         assert len(all_off_spans) == 2
+
+
+# ── Timestamp wrap (uint32_t µs wraps every ~71.58 min) ──────────────
+
+WRAP = 1 << 32  # 4_294_967_296 µs ≈ 71.58 minutes
+
+
+class TestTimestampWrap:
+    """SerialTracer emits uint32_t µs timestamps that wrap at 2**32.
+
+    EventCapture detects ts < previous_ts and adds 2**32 to subsequent
+    events so downstream (Perfetto etc.) sees a monotonic timeline.
+    """
+
+    def test_no_wrap_monotonic_input_unchanged(self):
+        capture = EventCapture()
+        capture.feed(_b("a", 1_000_000))
+        capture.feed(_b("b", 2_000_000))
+        capture.feed(_b("c", 3_000_000))
+
+        assert [e.device_timestamp_s for e in capture.events] == [1.0, 2.0, 3.0]
+
+    def test_single_wrap_adds_2_32(self):
+        # Last pre-wrap ts at ~71 min, first post-wrap at ~0.
+        pre = WRAP - 1_000_000            # 1 sec before wrap
+        post = 500_000                    # 0.5 sec after wrap
+
+        capture = EventCapture()
+        capture.feed(_b("long_work", pre))
+        capture.feed(_e("long_work", post))
+
+        pre_s = pre / 1_000_000
+        post_adjusted_s = (post + WRAP) / 1_000_000
+
+        ts_values = [e.device_timestamp_s for e in capture.events]
+        assert ts_values[0] == pytest.approx(pre_s)
+        assert ts_values[1] == pytest.approx(post_adjusted_s)
+        # Duration across wrap is 1.5 s, not ~-4294 s
+        assert capture.spans[0].device_duration_s == pytest.approx(1.5)
+
+    def test_multiple_wraps_accumulate(self):
+        capture = EventCapture()
+        # ts resets twice during the session
+        for i, ts in enumerate([1_000, 4_000_000_000, 2_000, 100]):
+            capture.feed(_b(f"s{i}", ts))
+
+        expected_adjusted_us = [1_000, 4_000_000_000, 2_000 + WRAP, 100 + 2 * WRAP]
+        observed = [e.device_timestamp_s * 1_000_000 for e in capture.events]
+        for obs, exp in zip(observed, expected_adjusted_us):
+            assert obs == pytest.approx(exp)
+
+    def test_wrap_does_not_trigger_on_equal_timestamps(self):
+        # Equal ts is common for back-to-back events (same sample). Not a wrap.
+        capture = EventCapture()
+        capture.feed(_b("a", 500_000))
+        capture.feed(_e("a", 500_000))
+        capture.feed(_b("b", 500_000))
+
+        assert all(e.device_timestamp_s == 0.5 for e in capture.events)
+
+    def test_wrap_produces_monotonic_stream(self):
+        # Feed a mix of events spanning a wrap; resulting device_timestamp_s
+        # must be strictly non-decreasing.
+        capture = EventCapture()
+        raw = [100, 2_000_000, WRAP - 10, WRAP - 5, 0, 100, 1_000_000]
+        for i, ts in enumerate(raw):
+            capture.feed(_b(f"s{i}", ts))
+
+        adjusted = [e.device_timestamp_s for e in capture.events]
+        assert adjusted == sorted(adjusted)
