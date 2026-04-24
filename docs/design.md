@@ -31,18 +31,11 @@ The bridge handles **bidirectional signals** between host and device.
 Each language implementation is a peer — it speaks the same wire protocol
 and can sit on either side of the link.
 
-```
-┌─────────────────────────┐         ┌─────────────────────────┐
-│       Side A            │  serial │       Side B            │
-│                         │  USB    │                         │
-│  Application            │  WiFi   │  Application            │
-│    ↕                    │         │    ↕                    │
-│  MessageReader/Writer   │ ←─────→ │  MessageReader/Writer   │
-│    ↕                    │         │    ↕                    │
-│  Framing (HDLC/SLIP/…)  │         │  Framing (HDLC/SLIP/…)  │
-│    ↕                    │         │    ↕                    │
-│  Transport              │         │  Transport              │
-└─────────────────────────┘         └─────────────────────────┘
+```mermaid
+flowchart LR
+    A["<b>Side A</b><br/><br/>Application<br/>↕<br/>MessageReader / Writer<br/>↕<br/>Framing (HDLC, SLIP, COBS)<br/>↕<br/>Transport"]
+    B["<b>Side B</b><br/><br/>Application<br/>↕<br/>MessageReader / Writer<br/>↕<br/>Framing (HDLC, SLIP, COBS)<br/>↕<br/>Transport"]
+    A <-->|"serial · USB · WiFi"| B
 ```
 
 The typical case is **C++ on the device** (embedded firmware) and **Python
@@ -322,12 +315,17 @@ PlatformIO provides the message source.
 
 ### Dependency flow
 
-```
-embedded-tracer ──serial──→ embedded-bridge ──receivers──→ pio-test-runner
-    (firmware, C++)            (host, Python)                (PIO plugin)
-                                    │
-                                    ├──→ ppk2-python (power correlation)
-                                    └──→ Perfetto UI / reports
+```mermaid
+flowchart LR
+    T["embedded-tracer<br/>(firmware, C++)"]
+    B["embedded-bridge<br/>(host, Python)"]
+    P["pio-test-runner<br/>(PIO plugin)"]
+    K["ppk2-python<br/>(power correlation)"]
+    U["Perfetto UI / reports"]
+    T -->|serial| B
+    B -->|receivers| P
+    B --> K
+    B --> U
 ```
 
 ---

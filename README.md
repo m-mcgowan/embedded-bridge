@@ -4,18 +4,11 @@ Communication stack for embedded systems. Each language implementation is a
 peer — it speaks the same wire protocol and can sit on either side of the
 link (device or host).
 
-```
-┌─────────────────────────┐         ┌─────────────────────────┐
-│       Side A            │  serial │       Side B            │
-│                         │  USB    │                         │
-│  Application            │  WiFi   │  Application            │
-│    ↕                    │         │    ↕                    │
-│  MessageReader/Writer   │ ←─────→ │  MessageReader/Writer   │
-│    ↕                    │         │    ↕                    │
-│  Framing (HDLC/SLIP/…)  │         │  Framing (HDLC/SLIP/…)  │
-│    ↕                    │         │    ↕                    │
-│  Transport              │         │  Transport              │
-└─────────────────────────┘         └─────────────────────────┘
+```mermaid
+flowchart LR
+    A["<b>Side A</b><br/><br/>Application<br/>↕<br/>MessageReader / Writer<br/>↕<br/>Framing (HDLC, SLIP, COBS)<br/>↕<br/>Transport"]
+    B["<b>Side B</b><br/><br/>Application<br/>↕<br/>MessageReader / Writer<br/>↕<br/>Framing (HDLC, SLIP, COBS)<br/>↕<br/>Transport"]
+    A <-->|"serial · USB · WiFi"| B
 ```
 
 The typical case is **C++ on the device** (embedded firmware) and **Python
@@ -25,22 +18,23 @@ alike, and the Python library has no OS-specific dependencies.
 
 ## Status
 
-| Feature | Design | Docs | Impl | Tests | Examples | Since | Updated |
-|---------|--------|------|------|-------|----------|-------|---------|
-| **Message protocol (C++)** | [design.md](docs/design.md) | | [message.h](cpp/include/embedded_bridge/message.h), [writer.h](cpp/include/embedded_bridge/writer.h) | | | | |
-| **Message protocol (Python)** | [design.md](docs/design.md) | | [message.py](python/src/embedded_bridge/framing/message.py) | [test_message](python/tests/test_message.py), [test_wire](python/tests/test_wire.py) | | | |
-| **HDLC framing (C++ & Python)** | [design.md](docs/design.md) | | [hdlc.h](cpp/include/embedded_bridge/framing/hdlc.h), [hdlc.py](python/src/embedded_bridge/framing/hdlc.py) | [test_hdlc](python/tests/test_hdlc.py) | | | |
-| **SLIP framing (C++ & Python)** | [design.md](docs/design.md) | | [slip.h](cpp/include/embedded_bridge/framing/slip.h), [slip.py](python/src/embedded_bridge/framing/slip.py) | [test_slip](python/tests/test_slip.py) | | | |
-| **COBS framing (C++ & Python)** | [design.md](docs/design.md) | | [cobs.h](cpp/include/embedded_bridge/framing/cobs.h), [cobs.py](python/src/embedded_bridge/framing/cobs.py) | [test_cobs](python/tests/test_cobs.py) | | | |
-| **CRC-16** | | | [crc16.h](cpp/include/embedded_bridge/detail/crc16.h), [crc16.py](python/src/embedded_bridge/framing/crc16.py) | [test_crc16](python/tests/test_crc16.py) | | | |
-| **Serial transport** | | | [serial.py](python/src/embedded_bridge/transport/serial.py) | [test_serial](python/tests/test_serial_transport.py) | | | |
-| **WebSocket transport** | | | [websocket.py](python/src/embedded_bridge/transport/websocket.py) | [test_websocket](python/tests/test_websocket_transport.py), [integration](python/tests/integration/test_websocket_transport_integration.py) | | | |
-| **CrashDetector** | | | [crash_detector.py](python/src/embedded_bridge/receivers/crash_detector.py) | [test_crash](python/tests/test_crash_detector.py) | | | |
-| **EventCapture** | | | [event_capture.py](python/src/embedded_bridge/receivers/event_capture.py) | [test_events](python/tests/test_event_capture.py) | | | |
-| **SleepWakeMonitor** | | | [sleep_wake.py](python/src/embedded_bridge/receivers/sleep_wake.py) | [test_sleep](python/tests/test_sleep_wake.py) | | | |
-| **MemoryTracker** | | | [memory_tracker.py](python/src/embedded_bridge/receivers/memory_tracker.py) | [test_memory](python/tests/test_memory_tracker.py) | | | |
-| **Router** | | | [router.py](python/src/embedded_bridge/receivers/router.py) | [test_router](python/tests/test_router.py) | | | |
-| **TestSession** | | | [session.py](python/src/embedded_bridge/testing/session.py) | [test_session](python/tests/test_test_session.py) | | | |
+| Feature | Design | Docs | Impl | Tests | Since | Updated |
+|---------|--------|------|------|-------|-------|---------|
+| **Message protocol (C++)** | [design.md](docs/design.md) | [README](#mix-text-commands-and-binary-data-on-one-serial-link) | [message.h](cpp/include/embedded_bridge/message.h), [writer.h](cpp/include/embedded_bridge/writer.h) | [test_message](cpp/test/test_message.cpp) | 0.1.0 | 2026-03-03 |
+| **Message protocol (Python)** | [design.md](docs/design.md) | [README](#mix-text-commands-and-binary-data-on-one-serial-link) | [message.py](python/src/embedded_bridge/framing/message.py) | [test_message](python/tests/test_message.py), [test_wire](python/tests/test_wire.py) | 0.1.0 | 2026-03-03 |
+| **HDLC framing (C++ & Python)** | [design.md](docs/design.md) | [README](#communicate-reliably-over-noisy-uart) | [hdlc.h](cpp/include/embedded_bridge/framing/hdlc.h), [hdlc.py](python/src/embedded_bridge/framing/hdlc.py) | [test_hdlc.cpp](cpp/test/test_hdlc.cpp), [test_hdlc.py](python/tests/test_hdlc.py) | 0.1.0 | 2026-03-13 |
+| **SLIP framing (C++ & Python)** | [design.md](docs/design.md) | [README](#communicate-reliably-over-noisy-uart) | [slip.h](cpp/include/embedded_bridge/framing/slip.h), [slip.py](python/src/embedded_bridge/framing/slip.py) | [test_slip.cpp](cpp/test/test_slip.cpp), [test_slip.py](python/tests/test_slip.py) | 0.1.0 | 2026-03-13 |
+| **COBS framing (C++ & Python)** | [design.md](docs/design.md) | [README](#communicate-reliably-over-noisy-uart) | [cobs.h](cpp/include/embedded_bridge/framing/cobs.h), [cobs.py](python/src/embedded_bridge/framing/cobs.py) | [test_cobs.cpp](cpp/test/test_cobs.cpp), [test_cobs.py](python/tests/test_cobs.py) | 0.1.0 | 2026-03-13 |
+| **LineFramer (Python)** | [design.md](docs/design.md) | — | [line.py](python/src/embedded_bridge/framing/line.py) | [test_line_framer](python/tests/test_line_framer.py) | 0.1.0 | 2026-03-03 |
+| **CRC-16 (C++ & Python)** | — | — | [crc16.h](cpp/include/embedded_bridge/detail/crc16.h), [crc16.py](python/src/embedded_bridge/framing/crc16.py) | [test_crc16.cpp](cpp/test/test_crc16.cpp), [test_crc16.py](python/tests/test_crc16.py) | 0.1.0 | 2026-03-03 |
+| **SerialTransport (Python)** | — | — | [serial.py](python/src/embedded_bridge/transport/serial.py) | [test_serial](python/tests/test_serial_transport.py) | 0.1.0 | 2026-03-03 |
+| **WebSocketTransport (Python)** | — | [README](#connect-via-websocket-bridge) | [websocket.py](python/src/embedded_bridge/transport/websocket.py) | [test_websocket](python/tests/test_websocket_transport.py), [integration](python/tests/integration/test_websocket_transport_integration.py) | next | 2026-04-23 |
+| **CrashDetector** | — | [README](#detect-device-crashes) | [crash_detector.py](python/src/embedded_bridge/receivers/crash_detector.py) | [test_crash](python/tests/test_crash_detector.py) | 0.1.0 | 2026-03-03 |
+| **EventCapture** | — | [README](#capture-timestamped-events-for-power-profiling) | [event_capture.py](python/src/embedded_bridge/receivers/event_capture.py) | [test_events](python/tests/test_event_capture.py) | 0.1.0 | 2026-04-23 |
+| **SleepWakeMonitor** | — | [README](#monitor-sleepwake-transitions) | [sleep_wake.py](python/src/embedded_bridge/receivers/sleep_wake.py) | [test_sleep](python/tests/test_sleep_wake.py) | 0.1.0 | 2026-03-03 |
+| **MemoryTracker** | — | — | [memory_tracker.py](python/src/embedded_bridge/receivers/memory_tracker.py) | [test_memory](python/tests/test_memory_tracker.py) | 0.1.0 | 2026-04-14 |
+| **Router** | — | [README](#route-mixed-output-to-multiple-receivers) | [router.py](python/src/embedded_bridge/receivers/router.py) | [test_router](python/tests/test_router.py) | 0.1.0 | 2026-03-03 |
+| **TestSession** | — | [README](#run-device-tests-with-sleepwake-handling) | [session.py](python/src/embedded_bridge/testing/session.py) | [test_session](python/tests/test_test_session.py) | 0.1.0 | 2026-04-23 |
 
 ## Language implementations
 
