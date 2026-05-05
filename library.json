@@ -1,6 +1,6 @@
 {
     "name": "embedded-bridge",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "description": "Communication stack for embedded systems \u2014 message protocol, framing, and diagnostics",
     "keywords": "embedded, serial, message, framing, hdlc, slip, cobs",
     "license": "BSD-3-Clause",

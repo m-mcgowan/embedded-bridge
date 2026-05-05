@@ -5,12 +5,39 @@ Follows [Keep a Changelog](https://keepachangelog.com/) conventions.
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-05-05
+
+### Changed
+- **BREAKING: Protocol prefix renamed `PTR:` → `ETST:`** (Embedded Test).
+  The inline protocol parser used by `MemoryTracker` (and coordinated with
+  `pio-test-runner`) now defaults to `ETST:`. Firmware emitting `PTR:`
+  markers will no longer be recognised by default. Call
+  `MemoryTracker.set_prefix("PTR:")` for backward compatibility, or
+  update the device side to emit `ETST:`.
+- `TestSession.monitor` now sends an ACK byte (`0x06`) to the device after
+  recording a `SLEEP:` marker, before disconnecting the transport. This
+  gives firmware a synchronisation point so measurement setup (e.g. PPK
+  power profiling) can complete before the device drops USB-CDC.
+  Firmware can report ACK receipt via a `SLEEP_ACK:<0|1>` `T=` marker.
+
 ### Added
 - **WebSocketTransport** — synchronous WebSocket transport using
   `websockets.sync.client`. Receives text and binary frames, buffers them
   as raw bytes for the `Transport` byte-stream interface, and supports
   reconnect on connection loss. Optional dependency:
   `pip install embedded-bridge[websocket]`.
+- `EventCapture` detects `uint32_t` timestamp wraps from
+  `embedded-trace`'s `SerialTracer` (raw `ts` wraps every ~71.58 minutes).
+  When a wrap is detected, subsequent events get `wrap_count * 2**32` µs
+  added to their adjusted timestamps so Perfetto and downstream consumers
+  see a monotonic stream across wraps.
+
+### Fixed
+- `EventCapture` wrap detection uses a `2**31` µs threshold instead of
+  strict `<` comparison, avoiding false wraps caused by sub-millisecond
+  timestamp jitter when events are emitted from multiple cores.
+- `MemoryTracker` import paths updated for the `etst` package rename, and
+  `set_prefix` correctly reconfigures the parser.
 
 ## [0.1.0] — 2026-03-17
 
