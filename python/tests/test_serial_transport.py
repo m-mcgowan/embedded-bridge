@@ -4,6 +4,9 @@ Uses unittest.mock to patch pyserial — no real hardware needed.
 """
 
 import pytest
+
+pytest.importorskip("serial")
+
 from unittest.mock import MagicMock, patch, PropertyMock
 
 from embedded_bridge.transport.base import Transport

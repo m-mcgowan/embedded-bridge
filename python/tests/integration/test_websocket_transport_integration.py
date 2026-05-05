@@ -11,6 +11,9 @@ import time
 from collections.abc import Callable, Iterator
 
 import pytest
+
+pytest.importorskip("websockets")
+
 from websockets.sync.server import serve
 
 from embedded_bridge.transport.websocket import WebSocketTransport

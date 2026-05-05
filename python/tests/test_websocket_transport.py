@@ -4,6 +4,9 @@ Uses unittest.mock to patch websockets — no real server needed.
 """
 
 import pytest
+
+pytest.importorskip("websockets")
+
 from unittest.mock import MagicMock, patch
 
 from embedded_bridge.transport.base import Transport
