@@ -5,6 +5,18 @@ Follows [Keep a Changelog](https://keepachangelog.com/) conventions.
 
 ## [Unreleased]
 
+## [0.2.1] — 2026-11-10
+
+### Fixed
+- **Python package built as version `0.0.0`.** setuptools-scm looked for git
+  metadata in `python/` (where `pyproject.toml` lives) instead of the
+  repository root, so every build fell back to `0.0.0` regardless of the
+  release tag. It now uses `root = ".."`, and a packaging test guards it.
+
+### Added
+- PyPI project description (`python/README.md`). First release published
+  to PyPI.
+
 ## [0.2.0] — 2026-05-05
 
 ### Changed
