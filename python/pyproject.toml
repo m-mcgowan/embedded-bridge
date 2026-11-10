@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "embedded-bridge"
 dynamic = ["version"]
 description = "Structured communication with embedded devices — pluggable transport, receivers, and emitters"
-# readme is at the repo root (../README.md), not bundled with the Python package
+readme = "README.md"
 license = {text = "BSD-3-Clause"}
 requires-python = ">=3.10"
 authors = [
@@ -36,12 +36,15 @@ websocket = [
 dev = [
     "pytest>=7.0",
     "pytest-timeout>=2.0",
+    "setuptools-scm>=8.0",
 ]
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools_scm]
+# The git repository (and its v* tags) is rooted one level above this file.
+root = ".."
 fallback_version = "0.0.0"
 
 [tool.pytest.ini_options]
